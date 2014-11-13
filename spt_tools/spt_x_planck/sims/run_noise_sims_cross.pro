@@ -44,7 +44,7 @@ pro run_noise_sims_cross, field_idx, covmap_fits_files, num_sims, $
     nbands=n_elements(banddef)-1
     bandcenters=(banddef[0:nbands-1]+banddef[1:nbands])/2
     
-    seed = -100L*field_idx
+    ;seed = -100L*field_idx
     mapname = 'MAP.MAP'
 
     sim_map_dir = workdir+'sim_maps/'
