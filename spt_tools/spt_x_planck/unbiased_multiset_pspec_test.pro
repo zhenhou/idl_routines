@@ -522,7 +522,8 @@ pro unbiased_multiset_pspec_test, mapfile, window, reso_arcmin, $
                              fftrdonly=fftrdonly, allspectra=allspectra, $
                              meansub=meansub,$
                              wt_by_unmasked_modes=wt_by_unmasked_modes, $
-                             est1_cov=cov1, est2_cov=cov2, convol_kernel=convolkern
+                             est1_cov=cov1, est2_cov=cov2, convol_kernel=convolkern, $
+                             delete_intfile=delete_intfile
 
 if keyword_set(wt_by_unmasked_modes) then begin 
     message, 'Sorry wt_by_unmasked_modes has not been re-implemented since the big overhaul'
@@ -974,6 +975,15 @@ if not keyword_set(auto) then begin
 endif else begin
     cov=cov1*(nrealizations) ;CR - June 28, 2012
 endelse
+
+if (keyword_set(delete_intfile)) then begin
+    ;statfile=tempdir+'/status_'+intfile_ident+'.'+mapname+'.sav'
+    ;fftfile=tempdir+'/ffts_'+intfile_ident+'.'+mapname+'.bin'
+    ;processedfftfile=tempdir+'/ffts_processed_'+intfile_ident+'.'+mapname+'.bin'
+    ;sumfftfile=tempdir+'/sumffts_'+intfile_ident+'.'+mapname+'.bin'
+    ;xpecfile=tempdir+'/xspecs_'+intfile_ident+'.'+mapname+'.bin'
+    file_delete, [statfile, processedfftfile]
+endif
 
 end
 

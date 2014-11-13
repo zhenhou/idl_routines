@@ -48,6 +48,7 @@ pro end_to_end_powspec_data, mapfiles, mask, reso_arcmin, $
     spectrum=spectrum, $
     npix=npix, workdir=workdir, $
     intfile_ident=intfile_ident, $
+    delete_intfile=delete_intfile, $
     resume=resume
 
     ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -100,7 +101,7 @@ pro end_to_end_powspec_data, mapfiles, mask, reso_arcmin, $
         /cmbweighting, banddef=banddef, maxell=maxell, $
         persistdir=datadir, auto=auto, mapname=mapname, npix=npix, chisq=meas_chisq,$
         kmask=kmask, allspectra=all_data_spectra, /no_cross_set, $
-        intfile_ident=intfile_ident;, $
+        intfile_ident=intfile_ident, delete_intfile=delete_intfile;, $
         ;est1_cov=est1_data_cov, $
         ;est2_cov=est2_data_cov, $
         ;convol_kern=convol_kern

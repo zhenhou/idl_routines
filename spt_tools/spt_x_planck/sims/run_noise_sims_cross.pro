@@ -2,6 +2,7 @@ pro run_noise_sims_cross, field_idx, covmap_fits_files, num_sims, $
     workpath=workpath, beamfile=beamfile, $
     bandcenters=bandcenters, dls_noise_sims=dls_noise_sims, $
     intfile_ident=intfile_ident, $
+    delete_intfile=delete_intfile, $
     resume=resume
 
     f = lps12_fieldstruct()
@@ -86,12 +87,14 @@ pro run_noise_sims_cross, field_idx, covmap_fits_files, num_sims, $
             invkernmat=invkernmat, $
             npix=npix, workdir=workdir, $
             intfile_ident=intfile_ident, $
+            delete_intfile=delete_intfile, $
             resume=resume
 
             dls_noise = spectrum[1:*,0]
             save, bandcenters, dls_noise, filename=dls_savfile
 
-            ;file_delete, sim_mapfiles
+            print, 'isim = '+sidx+' finished.'
+            ;;;;;file_delete, sim_mapfiles
         endelse
         
         if (isim eq 0) then begin
