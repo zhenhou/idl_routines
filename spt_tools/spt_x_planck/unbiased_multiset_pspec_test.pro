@@ -314,9 +314,9 @@ while ((fileidx lt nfiles) and (mapidx lt nmapsperfile)) do begin
 
     i=fileidx*nmapsperfile+mapidx
 
-    print, code+'processing file: '+strtrim(string(fileidx), 2)+' of '+$
-      strtrim(string(nfiles), 2)+', map '+strtrim(string(mapidx), 2)+' of '+$
-      strtrim(string(nmapsperfile), 2)+'        '
+    ;print, code+'processing file: '+strtrim(string(fileidx), 2)+' of '+$
+    ;  strtrim(string(nfiles), 2)+', map '+strtrim(string(mapidx), 2)+' of '+$
+    ;  strtrim(string(nmapsperfile), 2)+'        '
     
     count=(parallelism < (totalmaps-i))
     if count lt parallelism then begin
@@ -459,7 +459,7 @@ while i lt nbands do begin
                                                    stop=bandstartidx[istop]-1)
     ;process this data
     for iprime=i, istop-1 do begin
-        print, code+'processing band '+strtrim(string(iprime), 2)+'                 '
+        ;print, code+'processing band '+strtrim(string(iprime), 2)+'                 '
         nmodes=(bandstartidx[iprime+1]-bandstartidx[iprime])
         nmodes_out[iprime]=nmodes
         aidx=bandstartidx[iprime]-bandstartidx[i]
