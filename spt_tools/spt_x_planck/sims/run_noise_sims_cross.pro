@@ -72,8 +72,8 @@ pro run_noise_sims_cross, field_idx, covmap_fits_files, num_sims, $
             sim_map_fits1 = sim_map_dir+'simmap_halfring1_'+intfile_ident+'.fits'
             sim_map_fits2 = sim_map_dir+'simmap_halfring2_'+intfile_ident+'.fits'
 
-            gauss_noise_sim_covmap, covmap_fits_files[0], noise_map_scale=1.0d6, seed=seed, output_fits_file=sim_map_fits1
-            gauss_noise_sim_covmap, covmap_fits_files[1], noise_map_scale=1.0d6, seed=seed, output_fits_file=sim_map_fits2
+            ;gauss_noise_sim_covmap, covmap_fits_files[0], noise_map_scale=1.0d6, seed=seed, output_fits_file=sim_map_fits1
+            ;gauss_noise_sim_covmap, covmap_fits_files[1], noise_map_scale=1.0d6, seed=seed, output_fits_file=sim_map_fits2
 
             sim_mapfiles = [sim_map_fits1, sim_map_fits2]
 
