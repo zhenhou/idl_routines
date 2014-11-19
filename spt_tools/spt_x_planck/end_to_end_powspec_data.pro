@@ -47,6 +47,9 @@ pro end_to_end_powspec_data, mapfiles, mask, reso_arcmin, $
     invkernmat=invkernmat, $
     spectrum=spectrum, $
     npix=npix, workdir=workdir, $
+    apply_transfer=apply_transfer, $
+    read_lps12_transfer=read_lps12_transfer, $
+    transfer=transfer, $
     intfile_ident=intfile_ident, $
     delete_intfile=delete_intfile, $
     resume=resume
@@ -151,6 +154,19 @@ pro end_to_end_powspec_data, mapfiles, mask, reso_arcmin, $
     ;        k++
     ;    endfor
     ;endfor
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;
+    ;;
+    ;; Step 3.1: the transfer functions
+    ;;
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    if (keyword_set(apply_transfer)) then begin
+        if (keyword_set())
+    endif else begin
+
+    endelse
+
 
     ;;;;;;;;;;;;;;;;;;;;;;;;;
     ;;
