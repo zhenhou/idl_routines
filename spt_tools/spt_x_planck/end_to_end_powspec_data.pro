@@ -161,11 +161,13 @@ pro end_to_end_powspec_data, mapfiles, mask, reso_arcmin, $
     ;;
     ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-    if (keyword_set(apply_transfer)) then begin
-        if (keyword_set())
-    endif else begin
+    if (keyword_set(apply_transfer) and n_elements(transfer) eq 0) then begin
+        if (keyword_set(read_lps12_transfer)) then begin
+            
+        endif
+    endif else if (n_elements(transfer) eq 0) then begin
 
-    endelse
+    endif
 
 
     ;;;;;;;;;;;;;;;;;;;;;;;;;
