@@ -109,17 +109,22 @@ pro write_prj_fits, proj, fields_info, spt_freq=spt_freq
     for i_field=0, num_fields-1 do begin
         prj_file = proj[i_field].prj_file
         prj_info = file_info(prj_file)
+        
+        if (getenv('HOSTNAME') eq 'spt') then
+            map_path = fields_info[i_field].xspec_map_dir
+            if (keyword_set(spt_freq)) then begin
+                fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
+            endif else begin
+                fits_files = file_search(map_path, '*.fits')
+            endelse
+            res = read_spt_fits(fits_files[0])
+        endif
+    
+        if (getenv('HOSTNAME') eq 'midway') then
+            fits_file = '/home/zhenhou/scratch-data/projects/spt_x_planck/reproj/'+fields_info[i_field].name+'/hfi_SkyMap_143_nominal_ringfull_maxOrder4_prj.fits'
+            res = read_spt_fits(fits_file)
+        endif
 
-        ;map_path = fields_info[i_field].xspec_map_dir
-        ;if (keyword_set(spt_freq)) then begin
-        ;    fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
-        ;endif else begin
-        ;    fits_files = file_search(map_path, '*.fits')
-        ;endelse
-        fits_file = '/home/zhenhou/scratch-data/projects/spt_x_planck/reproj/'+fields_info[i_field].name+'/hfi_SkyMap_143_nominal_ringfull_maxOrder4_prj.fits'
-        ;res = read_spt_fits(fits_files[0])
-
-        res = read_spt_fits(fits_file)
         map_struct = expand_fits_struct(res)
         
         if (prj_info.exists) then begin
