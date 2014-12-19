@@ -110,13 +110,16 @@ pro write_prj_fits, proj, fields_info, spt_freq=spt_freq
         prj_file = proj[i_field].prj_file
         prj_info = file_info(prj_file)
 
-        map_path = fields_info[i_field].xspec_map_dir
-        if (keyword_set(spt_freq)) then begin
-            fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
-        endif else begin
-            fits_files = file_search(map_path, '*.fits')
-        endelse
-        res = read_spt_fits(fits_files[0])
+        ;map_path = fields_info[i_field].xspec_map_dir
+        ;if (keyword_set(spt_freq)) then begin
+        ;    fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
+        ;endif else begin
+        ;    fits_files = file_search(map_path, '*.fits')
+        ;endelse
+        fits_file = '/home/zhenhou/scratch-data/projects/spt_x_planck/reproj/'+fields_info[i_field].name+'/hfi_SkyMap_143_nominal_ringfull_maxOrder4_prj.fits'
+        ;res = read_spt_fits(fits_files[0])
+
+        res = read_spt_fits(fits_file)
         map_struct = expand_fits_struct(res)
         
         if (prj_info.exists) then begin
@@ -173,12 +176,23 @@ pro proj_planck_sptsz, max_order, planck_map_file=planck_map_file, rewrite_theta
     planck_output_path=planck_output_path, planck_output_root=planck_output_root, $
     jackhalf=jackhalf, half_roots=half_roots
 
-    if (not keyword_set(spt_output_path)) then spt_output_path = '/data23/hou/projects/spt_x_planck/reproj/'
-    if (not keyword_set(planck_output_path)) then planck_output_path = '/data23/hou/projects/spt_x_planck/reproj/'
+    hostname = getenv('HOSTNAME')
+
+    if (hostname eq 'spt') then begin
+        data_path = '/data23/hou/'
+        user = 'hou'
+    endif
+    if (hostname eq 'midway') then begin
+        data_path = '/home/zhenhou/scratch-midway2/'
+        user = 'zhenhou'
+    endif
+
+    if (not keyword_set(spt_output_path)) then spt_output_path = data_path+'projects/spt_x_planck/reproj/'
+    if (not keyword_set(planck_output_path)) then planck_output_path = data_path+'projects/spt_x_planck/reproj/'
     if (not keyword_set(spt_freq)) then spt_freq = 150
 
     if (not keyword_set(planck_map_file)) then $
-    planck_map_file='/data23/hou/planck_data/2013/all_sky_maps/single_field_maps/HFI_SkyMap_RING_143_2048_R1.10_nominal.fits'
+    planck_map_file=data_path+'planck_data/2014/all_sky_maps/single_field_maps/HFI_SkyMap_RING_143_2048_R1.10_nominal.fits'
     
     fields = lps12_fieldstruct()
     proj   = proj_struct(fields, planck_map_file, max_order, spt_output_path=spt_output_path, spt_output_root=spt_output_root, $
@@ -228,7 +242,7 @@ pro proj_planck_sptsz, max_order, planck_map_file=planck_map_file, rewrite_theta
         prj_exists += long(prj_info.exists)
     endfor
     
-    hpx_taylor = '/home/hou/Projects/projects/spt_x_planck/reproj/healpix_taylor/hpx_taylor'
+    hpx_taylor = '/home/'+user+'/Projects/projects/spt_x_planck/reproj/healpix_taylor/hpx_taylor'
     if (prj_exists eq num_fields) then begin
         print, "all prj files ready. skip hpx_taylor."
     endif else begin
