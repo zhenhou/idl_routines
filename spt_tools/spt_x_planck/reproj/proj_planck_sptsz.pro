@@ -110,7 +110,7 @@ pro write_prj_fits, proj, fields_info, spt_freq=spt_freq
         prj_file = proj[i_field].prj_file
         prj_info = file_info(prj_file)
         
-        if (getenv('HOSTNAME') eq 'spt') then
+        if (getenv('HOSTNAME') eq 'spt') then begin
             map_path = fields_info[i_field].xspec_map_dir
             if (keyword_set(spt_freq)) then begin
                 fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
@@ -120,8 +120,8 @@ pro write_prj_fits, proj, fields_info, spt_freq=spt_freq
             res = read_spt_fits(fits_files[0])
         endif
     
-        if (getenv('HOSTNAME') eq 'midway') then
-            fits_file = '/home/zhenhou/scratch-data/projects/spt_x_planck/reproj/'+fields_info[i_field].name+'/hfi_SkyMap_143_nominal_ringfull_maxOrder4_prj.fits'
+        if (getenv('HOSTNAME') eq 'midway') then begin
+            fits_file = '/home/zhenhou/scratch-data/projects/spt_x_planck/planck_2013/reproj/'+fields_info[i_field].name+'/hfi_SkyMap_143_nominal_ringfull_maxOrder4_prj.fits'
             res = read_spt_fits(fits_file)
         endif
 
