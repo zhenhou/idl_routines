@@ -505,7 +505,7 @@ end
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-pro unbiased_multiset_pspec_test, mapfile, window, reso_arcmin, $
+pro unbiased_multiset_pspec_beta, mapfile, window, reso_arcmin, $
                              ramlimit=ramlimit,$
                              setdef=setdef, $
                              spectrum=spectrum, covariance=cov, $

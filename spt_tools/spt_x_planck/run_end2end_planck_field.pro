@@ -7,6 +7,10 @@ auto=auto, $
 workpath=workpath, $
 bandcenters=bandcenters, spectrum=spectrum, resume=resume
 
+    host = getenv('HOSTNAME')
+    if host eq 'spt' then home='/home/hou/'
+    if host eq  'midway' then home='/home/zhenhou/'
+
     f = lps12_fieldstruct()
     fst = f[field_idx]
     field_name = fst.name
@@ -18,7 +22,7 @@ bandcenters=bandcenters, spectrum=spectrum, resume=resume
     ;------------- 
     ; directories 
     ;-------------
-    mask_dir    = '/data23/hou/projects/spt_x_planck/lps12/masks_50mJy/'
+    mask_dir    = home+'data/projects/spt_x_planck/lps12/masks_50mJy/'
     kern_dir    = mask_dir
     workdir     = workpath+'/'+field_name+'/'
     res = file_info(workdir)
@@ -39,7 +43,7 @@ bandcenters=bandcenters, spectrum=spectrum, resume=resume
     ;-------------------------
     kernfile = kern_dir+'kern_'+field_name+'.sav'
     restore, kernfile
-    mask_padded = get_lps12_mask(field_idx, /padded)
+    mask_padded = get_lps12_mask_zh(field_idx, /padded)
 
     ;-------------------------
     ; get BANDDEF
@@ -60,7 +64,6 @@ bandcenters=bandcenters, spectrum=spectrum, resume=resume
     ; get BEAMFILES
     ;-------------------------
     beamfiles = beamfile
-    ;beamfiles = '/data23/hou/planck_data/2013/beams/hfi_beam_143x143_nominal_wpix_R1.10.txt'
 
     ;-------------------------
     ; Run end_to_end

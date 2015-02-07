@@ -99,7 +99,7 @@ pro end_to_end_powspec_data, mapfiles, mask, reso_arcmin, $
     
     if not (keyword_set(resume) and (n_elements(spectrum_data_raw) ne 0) $
             and (n_elements(cov_data_raw) ne 0)) then begin
-        unbiased_multiset_pspec_test, mapfiles, mask, reso_arcmin, setdef=setdef_data, $
+        unbiased_multiset_pspec_beta, mapfiles, mask, reso_arcmin, setdef=setdef_data, $
         spectrum=spectrum_data_raw, cov=cov_data_raw, resume=resume,$
         /cmbweighting, banddef=banddef, maxell=maxell, $
         persistdir=datadir, auto=auto, mapname=mapname, npix=npix, chisq=meas_chisq,$
