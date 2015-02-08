@@ -1,9 +1,9 @@
-pro run_halfring_sims_xspec, field_idx, sim_map_root, num_sims, $
+pro run_sims_xspec, field_idx, sim_map_root, num_sims, $
     mapname=mapname, $
     workpath=workpath, beamfile=beamfile, $
     bandcenters=bandcenters, dls_sims=dls_sims, $
     dls_sav_root=dls_sav_root, $
-    delete_intfile=delete_intfile, $
+    delete_intfile=delete_intfile, sims_type=sims_type, $
     resume=resume
 
     f = lps12_fieldstruct()
@@ -14,14 +14,19 @@ pro run_halfring_sims_xspec, field_idx, sim_map_root, num_sims, $
     info = get_lps12_fieldinfo(field_idx)
     npix = info.npix
 
+    if (not keyword_set(sims_type)) then sims_type = 'halfmission'
+
     ;------------- 
     ; directories 
     ;-------------
-    data_path   = getenv('DATAPATH')
-    mask_dir    = data_path + 'projects/spt_x_planck/lps12/masks_50mJy/'
+    host        = getenv('HOSTNAME')
+    if host eq 'spt' then home = '/home/hou/'
+    if host eq 'midway' then home = '/home/zhenhou/'
+
+    mask_dir    = home+'data/projects/spt_x_planck/lps12/masks_50mJy/'
     kern_dir    = mask_dir
     workdir     = workpath+'/'+field_name+'/'
-    res = file_info(workdir)
+    res         = file_info(workdir)
     if (not res.exists) then spawn, ['mkdir', '-p', workdir], /noshell
 
     ;-------------------------
@@ -49,7 +54,7 @@ pro run_halfring_sims_xspec, field_idx, sim_map_root, num_sims, $
     bandcenters=(banddef[0:nbands-1]+banddef[1:nbands])/2
     
     if (not keyword_set(mapname)) then mapname = 'MAP.MAP'
-    if (not keyword_set(dls_sav_root)) then dls_sav_root='dls_halfring_sim_xspec'
+    if (not keyword_set(dls_sav_root)) then dls_sav_root='dls_'+sims_type+'_sims_xspec'
 
     sim_map_dir = workdir+'sim_maps/'
     s = file_info(sim_map_dir)
