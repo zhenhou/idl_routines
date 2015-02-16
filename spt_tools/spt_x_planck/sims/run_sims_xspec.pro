@@ -56,7 +56,7 @@ pro run_sims_xspec, field_idx, sim_map_root, num_sims, $
     if (not keyword_set(mapname)) then mapname = 'MAP.MAP'
     if (not keyword_set(dls_sav_root)) then dls_sav_root='dls_'+sims_type+'_sims_xspec'
 
-    sim_map_dir = workdir+'sim_maps/'
+    sim_map_dir = workdir+'fits_maps/'
     s = file_info(sim_map_dir)
     if (not s.exists) then file_mkdir, sim_map_dir
 

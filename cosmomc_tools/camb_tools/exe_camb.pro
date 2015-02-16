@@ -1,7 +1,11 @@
-pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, pivot_k=pivot_k, add=add
+pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, pivot_k=pivot_k, workspace=workspace, add=add
     
-    if (not keyword_set(camb_path)) then camb_path = '/home/hou/Projects/CMBtools/cosmologist.info/camb'
+    home = getenv('HOME')
+    if (not keyword_set(camb_path)) then camb_path = home+'/Projects/CMBtools/cosmologist.info/camb'
     camb = camb_path+'/camb'
+    
+    if (not keyword_set(workspace)) then workspace=home
+    file_mkdir, workspace+'/tmp'
     
     ombh2  = params.Omegabh2
     omch2  = params.Omegach2
@@ -15,12 +19,10 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     ns     = params.ns
     tau    = params.tau
     lmax   = params.lmax
+    ratio  = params.r
 
     ;As = exp(logA)/10.0
     
-    nu_massive = 0.0d0
-    nu_massless = 0.0d0
-
     ;if (params.Omeganuh2 le 1.00d-8) then begin
     ;    omnuh2 = 0.00d0
     ;    nu_massive  = 0.00d0
@@ -30,13 +32,13 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     ;    nu_massless = 0.00d0
     ;endelse
 
-    nu_massive  = long(neff)
+    nu_massive  = 1L
     nu_massless = neff - nu_massive
 
     if (keyword_set(pivot_k)) then pivk = pivot_k else pivk=0.0500
     
     fmt = '(A,D16.7)'
-    ini_file = '/tmp/'+output_root+'.ini'
+    ini_file = workspace+'/tmp/'+output_root+'.ini'
     get_lun, unit_ini
     openw, unit_ini, ini_file
     if (not keyword_set(old_camb)) then begin
@@ -52,7 +54,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
         endwhile
         free_lun, unit_common
     endelse
-    printf, unit_ini, 'output_root     = /tmp/'+output_root
+    printf, unit_ini, 'output_root     = '+workspace+'/tmp/'+output_root
     printf, unit_ini, format=fmt, 'ombh2           = ', ombh2
     printf, unit_ini, format=fmt, 'omch2           = ', omch2
     printf, unit_ini, format=fmt, 'omnuh2          = ', omnuh2
@@ -63,11 +65,14 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     printf, unit_ini, format=fmt, 'massless_neutrinos = ', nu_massless
     printf, unit_ini, format='(A,I6)', 'massive_neutrinos  = ', nu_massive
     printf, unit_ini, 'scalar_amp(1)      = '+strcompress(string(As),/remove)+'E-09'
+    printf, unit_ini, format=fmt, 'initial_ratio(1) = ', ratio
     printf, unit_ini, format=fmt, 'scalar_spectral_index(1)  = ', ns
     printf, unit_ini, format=fmt, 're_optical_depth   = ', tau
+    printf, unit_ini,             're_delta_redshift = 0.5'
     printf, unit_ini, ' '
     printf, unit_ini, format='(A,I6)',   'l_max_scalar      = ', lmax
     printf, unit_ini, format='(A,F5.3)', 'pivot_scalar      = ', pivk
+    printf, unit_ini,                    'highL_unlensed_cl_template = '+camb_path+'/HighLExtrapTemplate_lenspotentialCls.dat'
     
     if (keyword_set(add)) then begin
         nadd = n_elements(add)
@@ -97,7 +102,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     spawn, [camb, ini_file], /noshell
     print, "camb ends"
     
-    lensedcls_file = '/tmp/'+output_root+'_lensedCls.dat'
+    lensedcls_file = workspace+'/tmp/'+output_root+'_lensedCls.dat'
     readcol, lensedcls_file, il, cltt_tmp, clee_tmp, cltmp, clte_tmp, nlines=n, format='(L,D,D,D)', /silent
 
     lmax_file = n+1L
@@ -109,7 +114,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     lensedee[2:*] = clee_tmp
     lensedte[2:*] = clte_tmp
 
-    scalcls_file = '/tmp/'+output_root+'_lenspotentialCls.dat'
+    scalcls_file = workspace+'/tmp/'+output_root+'_lenspotentialCls.dat'
     readcol, scalcls_file, il, cltt_tmp, clee_tmp, clbbtmp, clte_tmp, clpp_tmp, clpt_tmp, clpe_tmp, nlines=n, format='(L,D,D,D,D,D,D,D)', /silent
     scaltt = dblarr(lmax_file+1)
     scalee = dblarr(lmax_file+1)
@@ -124,7 +129,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     cls = create_struct('lmax',lmax_file, 'TT',lensedtt, 'EE',lensedee, 'TE',lensedte, $
                         'scalcls_tt',scaltt, 'scalcls_ee',scalee, 'scalcls_te',scalte, 'scalcls_pp',scalpp)
 
-    spawn, 'rm -rf /tmp/'+output_root+'_*'
+    spawn, 'rm -rf '+workspace+'/tmp/'+output_root+'_*'
 
     return
 end
