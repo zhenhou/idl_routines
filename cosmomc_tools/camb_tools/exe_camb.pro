@@ -71,6 +71,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     printf, unit_ini,             're_delta_redshift = 0.5'
     printf, unit_ini, ' '
     printf, unit_ini, format='(A,I6)',   'l_max_scalar      = ', lmax
+    printf, unit_ini, format='(A,I8)',   'k_eta_max_scalar  = ', 2*lmax
     printf, unit_ini, format='(A,F5.3)', 'pivot_scalar      = ', pivk
     printf, unit_ini,                    'highL_unlensed_cl_template = '+camb_path+'/HighLExtrapTemplate_lenspotentialCls.dat'
     
@@ -103,15 +104,17 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     print, "camb ends"
     
     lensedcls_file = workspace+'/tmp/'+output_root+'_lensedCls.dat'
-    readcol, lensedcls_file, il, cltt_tmp, clee_tmp, cltmp, clte_tmp, nlines=n, format='(L,D,D,D)', /silent
+    readcol, lensedcls_file, il, cltt_tmp, clee_tmp, clbb_tmp, clte_tmp, nlines=n, format='(L,D,D,D)', /silent
 
     lmax_file = n+1L
     lensedtt = dblarr(lmax_file+1)
     lensedee = dblarr(lmax_file+1)
+    lensedbb = dblarr(lmax_file+1)
     lensedte = dblarr(lmax_file+1)
     
     lensedtt[2:*] = cltt_tmp
     lensedee[2:*] = clee_tmp
+    lensedbb[2:*] = clbb_tmp
     lensedte[2:*] = clte_tmp
 
     scalcls_file = workspace+'/tmp/'+output_root+'_lenspotentialCls.dat'
@@ -126,7 +129,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     scalte[2:lmax_file] = clte_tmp[0:lmax_file-2]
     scalpp[2:lmax_file] = clpp_tmp[0:lmax_file-2]
 
-    cls = create_struct('lmax',lmax_file, 'TT',lensedtt, 'EE',lensedee, 'TE',lensedte, $
+    cls = create_struct('lmax',lmax_file, 'TT',lensedtt, 'EE',lensedee, 'BB',lensedbb, 'TE',lensedte, $
                         'scalcls_tt',scaltt, 'scalcls_ee',scalee, 'scalcls_te',scalte, 'scalcls_pp',scalpp)
 
     spawn, 'rm -rf '+workspace+'/tmp/'+output_root+'_*'
