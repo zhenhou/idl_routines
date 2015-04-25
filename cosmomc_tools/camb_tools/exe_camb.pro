@@ -69,9 +69,12 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     printf, unit_ini, format=fmt, 'scalar_spectral_index(1)  = ', ns
     printf, unit_ini, format=fmt, 're_optical_depth   = ', tau
     printf, unit_ini,             're_delta_redshift = 0.5'
+    printf, unit_ini,             're_use_optical_depth = T'
+    printf, unit_ini,             'scalar_nrun(1) = 0.0'
+    printf, unit_ini,             'tensor_spectral_index(1) = 0.0'
     printf, unit_ini, ' '
     printf, unit_ini, format='(A,I6)',   'l_max_scalar      = ', lmax
-    printf, unit_ini, format='(A,I8)',   'k_eta_max_scalar  = ', 2*lmax
+    printf, unit_ini, format='(A,I8)',   'k_eta_max_scalar  = ', 3L*lmax
     printf, unit_ini, format='(A,F5.3)', 'pivot_scalar      = ', pivk
     printf, unit_ini,                    'highL_unlensed_cl_template = '+camb_path+'/HighLExtrapTemplate_lenspotentialCls.dat'
     
@@ -132,7 +135,7 @@ pro exe_camb, params, output_root, cls, old_camb=old_camb, camb_path=camb_path, 
     cls = create_struct('lmax',lmax_file, 'TT',lensedtt, 'EE',lensedee, 'BB',lensedbb, 'TE',lensedte, $
                         'scalcls_tt',scaltt, 'scalcls_ee',scalee, 'scalcls_te',scalte, 'scalcls_pp',scalpp)
 
-    spawn, 'rm -rf '+workspace+'/tmp/'+output_root+'_*'
+    ;spawn, 'rm -rf '+workspace+'/tmp/'+output_root+'_*'
 
     return
 end
