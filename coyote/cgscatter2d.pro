@@ -135,7 +135,7 @@
 ;            
 ;        All raster file output is created through PostScript intermediate files (the
 ;        PostScript files will be deleted), so ImageMagick and Ghostview MUST be installed 
-;        to produce anything other than PostScript output. (See cgPS2PDF and PS_END for 
+;        to produce anything other than PostScript output. (See cgPS2PDF and cgPS_Close for 
 ;        details.) And also note that you should NOT use this keyword when doing multiple 
 ;        plots. The keyword is to be used as a convenient way to get PostScript or raster 
 ;        output for a single graphics command. Output parameters can be set with cgWindow_SetDefs.
@@ -210,9 +210,11 @@
 ;        Removed an extra COLOR keyword and changed an OPLOT command to a PLOTS command
 ;           to allow a vector of colors to be used for the scatter points.
 ;         Added the ability to use escape characters in plot titles to specify cgSymbol symbols. 27 July 2012. DWF.
-;         
+;         Bad logic when creating a GRID and setting [XY]Style keywords. 30 Aug 2013. DWF.
+;         If you are setting a range, but not using the [XY]Style keywords, then I am going to set [XY]Style=1. 17 Feb 2014. DWF.
+;                  
 ; :Copyright:
-;     Copyright (c) 2012, Fanning Software Consulting, Inc.
+;     Copyright (c) 2012-2014, Fanning Software Consulting, Inc.
 ;-
 PRO cgScatter2D, x, y, $
     AddCmd=addcmd, $
@@ -261,10 +263,10 @@ PRO cgScatter2D, x, y, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(thisMulti) NE 0 THEN !P.Multi = thisMulti
-        IF N_Elements(currentState) NE 0 THEN SetDecomposedState, currentState
-        IF (N_Elements(output) NE 0) THEN PS_END, /NOFIX
+        IF N_Elements(currentState) NE 0 THEN cgSetColorState, currentState
+        IF (N_Elements(output) NE 0) THEN cgPS_Close, /NOFIX
         RETURN
     ENDIF
     
@@ -478,7 +480,7 @@ PRO cgScatter2D, x, y, $
          PS_TT_Font = ps_tt_font               ; Select the true-type font to use for PostScript output.   
        
        ; Set up the PostScript device.
-       PS_Start, $
+       cgPS_Open, $
           CHARSIZE=ps_charsize, $
           DECOMPOSED=ps_decomposed, $
           FILENAME=ps_filename, $
@@ -496,7 +498,7 @@ PRO cgScatter2D, x, y, $
     TVLCT, rr, gg, bb, /GET
     
     ; Going to do this in decomposed color, if possible.
-    SetDecomposedState, 1, CURRENTSTATE=currentState
+    cgSetColorState, 1, CURRENTSTATE=currentState
     
     ; Set up the layout, if necessary.
     IF N_Elements(layout) NE 0 THEN BEGIN
@@ -519,6 +521,8 @@ PRO cgScatter2D, x, y, $
     color = cgDefaultColor(sColor, DEFAULT=axisColor, TRADITIONAL=traditional)
     fcolor = cgDefaultColor(sfColor, DEFAULT='red', TRADITIONAL=traditional)
     gcolor = cgDefaultColor(sgColor, DEFAULT='gray', TRADITIONAL=traditional)
+    IF (N_Elements(xrange) NE 0) && (N_Elements(xstyle) EQ 0) THEN xstyle = 1
+    IF (N_Elements(yrange) NE 0) && (N_Elements(ystyle) EQ 0) THEN ystyle = 1
     
     ; Character size has to be determined *after* the layout has been decided.
     IF N_Elements(font) EQ 0 THEN font = !P.Font
@@ -555,7 +559,7 @@ PRO cgScatter2D, x, y, $
     
         ; If position is set, then fit the plot into those bounds.
         IF (N_Elements(position) GT 0) THEN BEGIN
-          trial_position = Aspect(aspect, margin=0.)
+          trial_position = cgAspect(aspect, margin=0.)
           trial_width = trial_position[2]-trial_position[0]
           trial_height = trial_position[3]-trial_position[1]
           pos_width = position[2]-position[0]
@@ -576,7 +580,7 @@ PRO cgScatter2D, x, y, $
           position[2] -= 0.5*(pos_width - trial_width)
           position[1] += 0.5*(pos_height - trial_height)
           position[3] -= 0.5*(pos_height - trial_height)
-        ENDIF ELSE position=Aspect(aspect)   ; if position isn't set, just use output of Aspect
+        ENDIF ELSE position=cgAspect(aspect)   ; if position isn't set, just use output of Aspect
         
     ENDIF
     
@@ -666,7 +670,8 @@ PRO cgScatter2D, x, y, $
           Plot, x, y, BACKGROUND=background, COLOR=gcolor, CHARSIZE=charsize, $
                 POSITION=position, /NODATA, NOERASE=tempNoErase, FONT=font, $
                 XTICKLEN=xticklen, YTICKLEN=yticklen, XRANGE=xrange, YRANGE=yrange, $
-                XGRIDSTYLE=glinestyle, YGRIDSTYLE=glinestyle, XSTYLE=4 AND xstyle, YSTYLE=4 AND ystyle, $
+                XGRIDSTYLE=glinestyle, YGRIDSTYLE=glinestyle, $
+                XSTYLE=(2S^16-5) AND xstyle, YSTYLE=(2S^16-5) AND ystyle, $
                 _STRICT_EXTRA=extra, XTickFormat='(A1)', YTickFormat='(A1)', $
                 XTITLE="", YTITLE="", TITLE=""
            
@@ -751,7 +756,7 @@ PRO cgScatter2D, x, y, $
            PDF_Path = pdf_path                             ; The path to the Ghostscript conversion command.
     
         ; Close the PostScript file and create whatever output is needed.
-        PS_END, DELETE_PS=delete_ps, $
+        cgPS_Close, DELETE_PS=delete_ps, $
              ALLOW_TRANSPARENT=im_transparent, $
              BMP=bmp_flag, $
              DENSITY=im_density, $
@@ -773,7 +778,7 @@ PRO cgScatter2D, x, y, $
     ENDIF
     
     ; Restore the decomposed color state if you can.
-    SetDecomposedState, currentState
+    cgSetColorState, currentState
     
     ; Restore the color table. Can't do this for the Z-buffer or
     ; the snap shot will be incorrect.

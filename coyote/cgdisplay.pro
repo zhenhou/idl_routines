@@ -41,7 +41,7 @@
 ;+
 ;   The purpose of cgDisplay is to open a graphics window on the display, or in the
 ;   PostScript device, or in the Z-graphics buffer, depending upon the current graphics
-;   device. In PostScript a window of the proper aspect ratio is created with PSWindow.
+;   device. In PostScript a window of the proper aspect ratio is created with cgPSWindow.
 ;   Using cgDisplay to open "windows" will allow you to more easily write device-independent
 ;   IDL programs.
 ;
@@ -151,9 +151,12 @@
 ;           the main IDL level. 7 Feb 2012. DWF.
 ;        Added FORCE and MATCH keywords. 16 Feb 2012. DWF.
 ;        Added PIXMAP, RETAIN, TITLE, XPOS, YPOS, and LOCATION keywords. 4 Sept 2012. DWF.
+;        If only one input parameter is passed, treat that as window index number to create. 15 Feb 2014. DWF.
+;        More work to fix a problem with an interaction between cgPS_Open and cgDisplay, when the
+;           PostScript file is set up in ENCAPSULATED mode and the ASPECT keyword is used. 8 May 2014. DWF.
 ;
 ; :Copyright:
-;     Copyright (c) 2010-2012, Fanning Software Consulting, Inc.
+;     Copyright (c) 2010-2014, Fanning Software Consulting, Inc.
 ;-
 PRO cgDisplay, pxsize, pysize, $
     ASPECT=aspect, $
@@ -179,12 +182,18 @@ PRO cgDisplay, pxsize, pysize, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
     ; Set up PostScript device for working with colors.
     IF !D.Name EQ 'PS' THEN Device, COLOR=1, BITS_PER_PIXEL=8
+    
+    ; If there is only one parameter, treat that as the window index number.
+    IF N_Params() EQ 1 THEN BEGIN
+        windowIndex = pxsize
+        Undefine, pxsize
+    ENDIF
     
     ; Check parameters and keywords.
     free = Keyword_Set(free)
@@ -265,15 +274,19 @@ PRO cgDisplay, pxsize, pysize, $
     ENDIF ELSE BEGIN
         CASE !D.Name OF
         
-            ; There can be some strange interactions with PS_START if PS_START
+            ; There can be some strange interactions with cgPS_Open if cgPS_Open
             ; is called with no current windows open, and cgDisplay is called with
             ; an aspect ratio that results in a PORTRAIT mode display. This checks
             ; for that problem.
             'PS': BEGIN
                 COMMON _$FSC_PS_START_, ps_struct
-                keywords = PSWindow(AspectRatio=Float(pysize)/pxsize)
+                IF N_Elements(ps_struct) NE 0 THEN BEGIN
+                    keywords = cgPSWindow(AspectRatio=Float(pysize)/pxsize, Landscape=ps_struct.landscape)
+                ENDIF ELSE BEGIN
+                    keywords = cgPSWindow(AspectRatio=Float(pysize)/pxsize)
+                    ps_struct.landscape = keywords.landscape
+                ENDELSE
                 Device, _Extra=keywords
-                IF N_Elements(ps_struct) NE 0 THEN ps_struct.landscape = keywords.landscape
                 END
             'Z': Device, Set_Resolution=[pxsize,pysize]
             ELSE:

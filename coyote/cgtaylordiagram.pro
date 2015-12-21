@@ -59,6 +59,11 @@
 ;          - The centered RMS difference, 
 ;          - The correlation, 
 ;          - The standard deviation
+;          
+; The reference to Karl Taylor's original paper explaining the diagram is Taylor, K.E., 
+; `Summarizing multiple aspects of model performance in a single diagram, <http://onlinelibrary.wiley.com/doi/10.1029/2000JD900719/abstract>` J. Geophys. Res., 106, 7183-7192, 2001.
+;       
+; Here is a `simple, but complete, explanation <http://www-pcmdi.llnl.gov/about/staff/Taylor/CV/Taylor_diagram_primer.pdf>` of the diagram.      
 ;  
 ; :Categories:
 ;    Graphics
@@ -85,15 +90,31 @@
 ;    labels: in, optional, type=string
 ;        An array of string labels for the points that will be plotted on the diagram.
 ;        This array must be the same length as the `stddev` array and the `correlation` array.
+;    noerase: in, optional, type=boolean, default=0
+;        Set this keyword if you don't want the Taylor Diagram plot to erase what is already on
+;        the display.
 ;    output: in, optional, type=string
 ;        The name of an output file to write the Taylor Diagram to. The type of file is taken from
 ;        the file extension. For example, OUTPUT='mydiagram.png'. It is assumed that Ghostscript and
 ;        ImageMagick have been installed properly for all raster file output. If the Output keyword is
-;        used, nothing is drawn on the display.
+;        used, nothing is drawn on the display. This keyword cannot be used with the Overplot keyword.
+;    overplot: in, optional, type=boolean, default=0
+;        Set this keyword to overplot onto an already existing Taylor Diagram. Many keywords are
+;        ignored if this keyword is set. Only the data is drawn. The Output keyword cannot be used
+;        if overplotting.
 ;    position: in, optional, type=float
 ;        A four-element, normalized array giving the position of the plot in the display window: [x0,y0,x1,y1].
 ;    ref_stddev: in, optional, type=float, default=1.0
 ;        The reference standard deviation. This is typically the "observed" or "model" value. A scalar.
+;    rms_circles_off: in, optional, type=boolean, default=0
+;        Set this keyword to prevent the drawing of the RMS circles that radiate out from the observed RMS value.
+;    rms_format: in, optional, type=string, default='(I0)'
+;        Set this keyword to a format string that is used for format the RMS circle labels.
+;    rms_increment: in, optional, type=float, default=1.0
+;        The RMS circles are drawn from the observed RMS value, using this value as an increment of the circle radius.
+;    rms_labels_off: in, optional, type=boolean, default=0
+;        Set this keyword to prevent the drawing of the RMS circle labels. If this keyword is set, only the RMS
+;        circles are drawn.
 ;    stddev_max: in, optional, type=float
 ;        The maximum standard deviation to plot on the graph. 
 ;    symbol: in, optional, type=integer, default=16
@@ -130,9 +151,20 @@
 ;            Fernando did *all* of the hard work writing the program for the IDL 8 function
 ;            graphics routine. I simply copied most of his code and adapted it for non-IDL 8 
 ;            users. I also added a couple of features I though were missing from the original code.
+;        Added OVERPLOT keyword. 21 May 2013. DWF.
+;        Added RMS_*** keywords to allow more control over the drawing and labeling of the RMS circles 
+;            on the plot. 29 July 2013. DWF.
+;        Modified the algorithm that places the "Correlation" label to allow multiple plots in a 
+;           window. Also removed a cgPolyFill command that appeared to have no effect. 19 Nov 2013. DWF.
+;        Added NOERASE keyword and made sure no window was opened when OUTPUT keyword is used. 21 Nov 2013. DWF.
+;        Added check to not create initial plot if PostScript is the current device. 18 Feb 2015. DWF.
+;        Small modification to prevent extraneous drawing on right edge of plot in PostScript files,
+;           and updated figures and documentation. 10 April 2015. DWF.
+;        Another small modification to accommodate extraneous line removal when doing multiple plots on
+;           a page. Appears to work in both PostScript and on the display for multiple plots. 19 May 2015. DWF.
 ;
 ; :Copyright:
-;     Copyright (c) 2013, Fanning Software Consulting, Inc.
+;     Copyright (c) 2013-2015, Fanning Software Consulting, Inc.
 ;-
 PRO cgTaylorDiagram, stddev, correlation, $
     ADDCMD=addcmd, $
@@ -141,9 +173,15 @@ PRO cgTaylorDiagram, stddev, correlation, $
     C_REF=c_ref, $
     C_SYMBOL=c_symbol, $
     LABELS=labels, $
+    NOERASE=noerase, $
     OUTPUT=output, $
+    OVERPLOT=overplot, $
     POSITION=position, $
     REF_STDDEV=ref_stddev, $
+    RMS_CIRCLES_OFF=rms_circles_off, $
+    RMS_FORMAT=rms_format, $
+    RMS_INCREMENT=rms_increment, $
+    RMS_LABELS_OFF=rms_labels_off, $
     STDDEV_MAX=stddev_max, $
     SYMBOL=symbol, $
     SYMSIZE=symsize, $
@@ -155,13 +193,16 @@ PRO cgTaylorDiagram, stddev, correlation, $
   Catch, theError
   IF theError NE 0 THEN BEGIN
       Catch, /CANCEL
-      void = Error_Message()
-      IF N_Elements(currentState) NE 0 THEN SetDecomposedState, currentState
+      void = cgErrorMsg()
+      IF N_Elements(currentState) NE 0 THEN cgSetColorState, currentState
       RETURN
   ENDIF
+  
+  overplot = Keyword_Set(overplot)
+  noerase = Keyword_Set(noerase)
 
   ; Are we doing some kind of output?
-  IF (N_Elements(output) NE 0) && (output NE "") THEN BEGIN
+  IF (N_Elements(output) NE 0) && (output NE "") && ~overplot THEN BEGIN
     
        ; Determine the type of file from the filename extension.
        root_name = cgRootName(output, DIRECTORY=theDir, EXTENSION=ext)
@@ -244,7 +285,7 @@ PRO cgTaylorDiagram, stddev, correlation, $
          PS_TT_Font = ps_tt_font               ; Select the true-type font to use for PostScript output.   
        
        ; Set up the PostScript device.
-       PS_Start, $
+       cgPS_Open, $
           CHARSIZE=ps_charsize, $
           DECOMPOSED=ps_decomposed, $
           FILENAME=ps_filename, $
@@ -273,9 +314,15 @@ PRO cgTaylorDiagram, stddev, correlation, $
                 C_REF=c_ref, $
                 C_SYMBOL=c_symbol, $
                 LABELS=labels, $
+                NOERASE=noerase, $
                 OUTPUT=output, $
+                OVERPLOT=overplot, $
                 POSITION=position, $
                 REF_STDDEV=ref_stddev, $
+                RMS_CIRCLES_OFF=rms_circles_off, $
+                RMS_FORMAT=rms_format, $
+                RMS_INCREMENT=rms_increment, $
+                RMS_LABELS_OFF=rms_labels_off, $
                 STDDEV_MAX=stddev_max, $
                 SYMBOL=symbol, $
                 SYMSIZE=symsize, $
@@ -292,9 +339,15 @@ PRO cgTaylorDiagram, stddev, correlation, $
                 C_REF=c_ref, $
                 C_SYMBOL=c_symbol, $
                 LABELS=labels, $
+                NOERASE=noerase, $
                 OUTPUT=output, $
+                OVERPLOT=overplot, $
                 POSITION=position, $
                 REF_STDDEV=ref_stddev, $
+                RMS_CIRCLES_OFF=rms_circles_off, $
+                RMS_FORMAT=rms_format, $
+                RMS_INCREMENT=rms_increment, $
+                RMS_LABELS_OFF=rms_labels_off, $
                 STDDEV_MAX=stddev_max, $
                 SYMBOL=symbol, $
                 SYMSIZE=symsize, $
@@ -303,7 +356,7 @@ PRO cgTaylorDiagram, stddev, correlation, $
     ENDIF
     
   ; Do this in decomposed color mode.
-  SetDecomposedState, 1, CURRENT=currentState
+  cgSetColorState, 1, CURRENT=currentState
   
   ; Check parameters.
   IF N_Params() NE 2 THEN BEGIN
@@ -319,7 +372,12 @@ PRO cgTaylorDiagram, stddev, correlation, $
   SetDefaultValue, symbol, 16
   SetDefaultValue, symsize, 1.5
   SetDefaultValue, ref_stddev, 1.0
+  SetDefaultValue, rms_increment, 1.0
+  SetDefaultValue, rms_format, '(I0)'
   SetDefaultValue, stddev_max, Round((Max(stddev) * 1.25) * 10)/ 10.0
+  
+  ; Skip all this if you are overplotting
+  IF overplot THEN GOTO, overplotComeHere
     
   ; Construction of the diagram.
   
@@ -333,9 +391,9 @@ PRO cgTaylorDiagram, stddev, correlation, $
   ENDIF
    
   ; Initial plot in window.
-  cgDisplay, 680, 640
+  IF (!D.Window LT 0) && (~overplot) && (!D.Name NE 'PS') THEN cgDisplay, 680, 640
   cgPlot, x, y, /NoData, XTITLE='Standard Deviation', YTITLE='Standard Deviation', $
-      XSTYLE=9, YSTYLE=9, POSITION=position, BACKGROUND='white'
+      XSTYLE=9, YSTYLE=9, POSITION=position, BACKGROUND='white', NOERASE=noerase
   
   ; PART II: Building ticks: Long and Short ticks
   ; Long Ticks
@@ -349,39 +407,51 @@ PRO cgTaylorDiagram, stddev, correlation, $
   long_y_left  = FltArr(nticks)
   
   ; Multiple RMS circles
-  multi_cir = 1000          ;number of points of each RMS circle
-  ratio = 0.25          ;ratios for each circle: i.e. in increments of this value
-  number_cirs = stddev_max * 4   ;Number of RMS circles
+  multi_cir = 1000                                      ; Number of points of each RMS circle
+  number_cirs = Fix((stddev_max / rms_increment)) + 5   ; Number of RMS circles
+  initial_rms_increment = rms_increment
     
-  FOR i=0, number_cirs-1 DO BEGIN
-
-    multi_max = ref_stddev + ratio
-    multi_min = ref_stddev - ratio
-   
-    multi_circlesx = Findgen(multi_cir)/(multi_cir-1)*(multi_max-multi_min)+multi_min
-    multi_circlesy = SQRT(ratio^2 - (multi_circlesx-ref_stddev)^2)
-
-    cgPlotS, 0 > multi_circlesx < stddev_max, multi_circlesy, COLOR=c_stddev, LINESTYLE=1
-    number = String(i+1)
-    IF (multi_circlesx[i+50] GT 0) AND (multi_circlesx[i+50] LT 1.5) THEN BEGIN
-        cgText, multi_circlesx[i+50], multi_circlesy[i+50], number, $
-           CHARSIZE=cgDefCharsize()*0.8, ALIGNMENT=1, /DATA, CLIP=0, COLOR=c_stddev
-    ENDIF
-    ratio = ratio + 0.25
+  IF ~Keyword_Set(rms_circles_off) THEN BEGIN
+      FOR i=0, number_cirs-1 DO BEGIN
     
-  ENDFOR
+        multi_max = ref_stddev + rms_increment
+        multi_min = ref_stddev - rms_increment
+       
+        multi_circlesx = Findgen(multi_cir)/(multi_cir-1)*(multi_max-multi_min)+multi_min
+        multi_circlesy = SQRT(rms_increment^2 - (multi_circlesx-ref_stddev)^2)
+        x_to_plot = 0 > multi_circlesx < stddev_max
+        y_to_plot = 0 > multi_circlesy < stddev_max
+        maxIndex = Where(x_to_plot GE stddev_max, maxCnt)
+        IF maxCnt GT 0 THEN BEGIN
+            x_to_plot = x_to_plot[0:maxIndex[0]-1]
+            y_to_plot = y_to_plot[0:maxIndex[0]-1]
+        ENDIF
+        cgPlotS, x_to_plot, y_to_plot, COLOR=c_stddev, LINESTYLE=1
+        number = String(rms_increment, Format=rms_format)
+
+        IF ~Keyword_Set(rms_labels_off) THEN BEGIN
+            IF (multi_circlesx[i+50] GT 0) AND (multi_circlesx[i+50] LT stddev_max) THEN BEGIN
+                cgText, multi_circlesx[i+50], multi_circlesy[i+50], number, $
+                   CHARSIZE=cgDefCharsize()*0.8, ALIGNMENT=1, /DATA, CLIP=0, COLOR=c_stddev
+            ENDIF
+        ENDIF
+        rms_increment = initial_rms_increment + rms_increment
+        
+      ENDFOR
+  ENDIF
   
-  ; Mask: Masking part of the RMS circles out:
+  ; Masking part of the RMS circles out.
   cgColorFill, [x, stddev_max, x[0]],[y, stddev_max, y[0]], /data, COLOR='white'
-  cgPolygon, [x, stddev_max, x[0]],[y, stddev_max, y[0]], /data, COLOR='white'
-  cgColorFill, [!X.Window[0],!X.Window[0], !X.Window[1], !X.Window[1], !X.Window[0]], $
-               [!Y.Window[1], 1.0, 1.0, !Y.Window[1], !Y.Window[1]], /Normal, COLOR='white'
+  cgPolygon,   [x, stddev_max, x[0]],[y, stddev_max, y[0]], /data, COLOR='white'
+  cgColorFill, [         0,               0, stddev_max*1.05, stddev_max*1.05,          0], $
+               [stddev_max, stddev_max*1.05, stddev_max*1.05,      stddev_max, stddev_max], $
+               COLOR='white' ; To remove traces of line above plot in PostScript files.
   
   cgPlotS, x, y
   
  ; Short Ticks
  ; new circle where its points will be used as the end point of the short ticks
-  short_cir = 1000
+   short_cir = 1000
   short_max = stddev_max*.98
   short_min = 0.0
   short_cir_x = Findgen(short_cir)/(short_cir-1)*(short_max-short_min)+short_min
@@ -476,10 +546,11 @@ PRO cgTaylorDiagram, stddev, correlation, $
     cgPlots, [extrashort_outerx[i], extrashortx[i]], [extrashort_outery[i], extrashorty[i]], COLOR=c_correlation
   ENDFOR
   
-  ;Correlation Axis Name
-  cc_namex  = stddev_max - stddev_max*0.25
-  cc_namey  = stddev_max - stddev_max*0.25
-  cgText, cc_namex, cc_namey, 'Correlation', ORIENTATION=-45., ALIGNMENT=0.5,  COLOR=c_correlation
+  ; Correlation Axis Name
+  cc_namex  = (!X.Window[1] - !X.Window[0]) * 0.775 + !X.Window[0]
+  cc_namey  = (!Y.Window[1] - !Y.Window[0]) * 0.775 + !Y.Window[0]
+  cgText, cc_namex, cc_namey, 'Correlation', ORIENTATION=-45., ALIGNMENT=0.5,  $
+    COLOR=c_correlation, /NORMAL
  
 
   ; Observed/Reference Circles. The dashed circles centered in the Observed value are the centered RMS
@@ -493,6 +564,7 @@ PRO cgTaylorDiagram, stddev, correlation, $
   cgText, ref_max, stddev_max * 0.05, 'Observed', ALIGNMENT=0.5, COLOR='pur7'
   
   ; PART III: Plotting the Input Data Points
+  overplotComeHere:
   dataangle = ACos( correlation )            
   data_x = stddev * Cos( dataangle )     
   data_y = stddev * Sin( dataangle )  
@@ -500,10 +572,12 @@ PRO cgTaylorDiagram, stddev, correlation, $
   cgPlotS, data_x, data_y, PSYM=symbol, COLOR=c_symbol, SymSize=symsize
   xy = Convert_Coord(data_x, data_y, /DATA, /TO_NORMAL)
   squib = 0.0075
-  cgText, xy[0,*], xy[1,*] + 2*squib, labels, /NORMAL, FONT=0, ALIGNMENT=0.5
+  IF N_Elements(labels) NE 0 THEN BEGIN
+      cgText, xy[0,*], xy[1,*] + 2*squib, labels, /NORMAL, FONT=0, ALIGNMENT=0.5
+  ENDIF
   
   ; Are we producing output? If so, we need to clean up here.
-  IF (N_Elements(output) NE 0) && (output NE "") THEN BEGIN
+  IF (N_Elements(output) NE 0) && (output NE "") && (~overplot) THEN BEGIN
     
        ; Get the output default values.
        cgWindow_GetDefs, $
@@ -516,7 +590,7 @@ PRO cgTaylorDiagram, stddev, correlation, $
            PDF_Path = pdf_path                             ; The path to the Ghostscript conversion command.
     
         ; Close the PostScript file and create whatever output is needed.
-        PS_END, DELETE_PS=delete_ps, $
+        cgPS_Close, DELETE_PS=delete_ps, $
              ALLOW_TRANSPARENT=im_transparent, $
              BMP=bmp_flag, $
              DENSITY=im_density, $
@@ -538,7 +612,7 @@ PRO cgTaylorDiagram, stddev, correlation, $
   ENDIF
 
   ; Restore color mode.
-  SetDecomposedState, currentState
+  cgSetColorState, currentState
   
 END
   
@@ -547,11 +621,17 @@ END
   
   ;#######################################  Main Test Program  #############################################
 
+      cgDisplay, 700, 700
       labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']            ; Point labels.
       stddev = [1.4, 0.9, 1.0, 1.272, 1.1, 0.95, 1.08, 0.5]        ; Standard Deviations
       correlation = [0.8, 0.9, 0.65, 0.74, 0.91, 0.98, 0.85, 0.35] ; Correlations
       ref_std = 1.0                                                ; Reference standard (observed)
       stddev_max = 1.5                                             ; Standard Deviation maximum
-      cgTaylorDiagram, stddev, correlation, REF_STDDEV=ref_std, STDDEV_MAX=stddev_max, LABELS=labels, /WINDOW
+      cgTaylorDiagram, stddev, correlation, REF_STDDEV=ref_std, STDDEV_MAX=stddev_max, $
+          RMS_INCREMENT=0.25, RMS_FORMAT='(F0.2)', LABELS=labels
 
+      labels = ['I',  'J', 'K', 'L',  'M', 'N', 'O',   'P']                 ; Point labels.
+      stddev = [1.25, 0.7, 1.1, 0.86, 1.5, 1.21, 0.78, 0.52]                ; Standard Deviations
+      correlation = Reverse([0.8, 0.9, 0.65, 0.74, 0.91, 0.98, 0.85, 0.35]) ; Correlations
+      cgTaylorDiagram, stddev, correlation, /OVERPLOT, LABELS=labels, C_SYMBOL='blue'
 END

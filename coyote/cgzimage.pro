@@ -70,9 +70,10 @@
 ;           needed. 18 October 2012. DWF.
 ;        The color palette was not always being included when images were zoomed. Fixed. 17 Nov 2012. DWF.
 ;        Added ZoomFactor keyword to allow the zoom factor to be set on start-up. 28 Nov 2012. DWF.
+;        Fixed a typo that caused bringing controls into the window to fail. 13 Jan 2014. DWF.
 ;
 ; :Copyright:
-;     Copyright (c) 2012, Fanning Software Consulting, Inc.
+;     Copyright (c) 2012-2014, Fanning Software Consulting, Inc.
 ;-
 
 ;+
@@ -90,7 +91,7 @@ PRO cgZImage_ZoomWindow_Events, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -99,8 +100,8 @@ PRO cgZImage_ZoomWindow_Events, event
     Widget_Control, tlb, Get_UValue=info
     
     ; Create the proper vectors to locate the cursor in the image.
-    xvec = Scale_Vector(Findgen((*info).zxsize), (*info).xrange[0], (*info).xrange[1])
-    yvec = Scale_Vector(Findgen((*info).zysize), (*info).yrange[0], (*info).yrange[1])
+    xvec = cgScaleVector(Findgen((*info).zxsize), (*info).xrange[0], (*info).xrange[1])
+    yvec = cgScaleVector(Findgen((*info).zysize), (*info).yrange[0], (*info).yrange[1])
     xloc = 0 > Round(xvec[event.x]) < ((*info).xsize-1)
     yloc = 0 > Round(yvec[event.y]) < ((*info).ysize-1)
     
@@ -126,8 +127,8 @@ PRO cgZImage_ZoomWindow_Events, event
     ; Create the text for the statusbar widget and update the status bar.
     IF Obj_Valid(*(*info).map) THEN BEGIN
         *(*info).map -> GetProperty, XRANGE=xrange, YRANGE=yrange
-        xvec = Scale_Vector(Findgen((*info).xsize), xrange[0], xrange[1])
-        yvec = Scale_Vector(Findgen((*info).ysize), yrange[0], yrange[1])
+        xvec = cgScaleVector(Findgen((*info).xsize), xrange[0], xrange[1])
+        yvec = cgScaleVector(Findgen((*info).ysize), yrange[0], yrange[1])
         ll = *(*info).map -> Inverse(xvec[xloc], yvec[yloc])
         loctext = 'Lat: ' + String(ll[1], Format='(F0.3)') + '  Lon: ' + String(ll[0], Format='(F0.3)')
     ENDIF ELSE BEGIN
@@ -147,8 +148,8 @@ PRO cgZImage_ZoomWindow_Events, event
     ; larger image.
     WSet, (*info).drawIndex
     Device, Copy=[0, 0, (*info).xsize, (*info).ysize, 0, 0, (*info).pixIndex]    
-    xvec = Scale_Vector(Findgen(!D.X_Size), 0, (*info).xsize)
-    yvec = Scale_Vector(Findgen(!D.Y_Size), 0, (*info).ysize)
+    xvec = cgScaleVector(Findgen(!D.X_Size), 0, (*info).xsize)
+    yvec = cgScaleVector(Findgen(!D.Y_Size), 0, (*info).ysize)
     xdloc = Value_Locate(xvec, xloc)
     ydloc = Value_Locate(yvec, yloc)
     cgPlotS, [(*info).xs, (*info).xs, (*info).xd, (*info).xd, (*info).xs], $
@@ -175,7 +176,7 @@ PRO cgZImage_ZoomDied, zoomID
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message(/Quiet)
+        void = cgErrorMsg(/Quiet)
         RETURN
     ENDIF
 
@@ -237,7 +238,7 @@ PRO cgZImage_BoxColor, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
        RETURN
     ENDIF
 
@@ -297,7 +298,7 @@ PRO cgZImage_LoadColors, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -473,7 +474,7 @@ PRO cgZImage_Factor, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
          
         ; Put the info structure back.
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info
@@ -506,7 +507,7 @@ PRO cgZImage_DrawEvents, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
          
         ; Turn motion events off.
         Widget_Control, event.id, Draw_Motion_Events=0        
@@ -531,7 +532,7 @@ PRO cgZImage_DrawEvents, event
        IF buttonPressed EQ 'RIGHT' THEN BEGIN
           IF (*info).mapcontrols EQ 1 THEN BEGIN
              Widget_Control, (*info).controlID, Map=0
-             (*info).map = 0
+             (*info).mapcontrols = 0
           ENDIF ELSE BEGIN
              Widget_Control, (*info).controlID, Map=1
              (*info).mapcontrols = 1
@@ -589,8 +590,8 @@ PRO cgZImage_DrawEvents, event
       
       ; Make sure these are in image pixel coordinates, not just
       ; window pixel coordinates.
-      xvec = Scale_Vector(Indgen((*info).xsize), 0, !D.X_Size-1)
-      yvec = Scale_Vector(Indgen((*info).ysize), 0, !D.Y_Size-1)
+      xvec = cgScaleVector(Indgen((*info).xsize), 0, !D.X_Size-1)
+      yvec = cgScaleVector(Indgen((*info).ysize), 0, !D.Y_Size-1)
       x = Value_Locate(xvec, x)
       y = Value_Locate(yvec, y)
       (*info).xrange = x
@@ -911,7 +912,7 @@ PRO cgZImage, image, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     

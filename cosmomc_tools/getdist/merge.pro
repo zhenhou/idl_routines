@@ -3,18 +3,21 @@ pro merge, ps_files, merged_pdf=merged_pdf
     n_ps = n_elements(ps_files)
     pdf_files = strarr(n_ps)
 
+    home = getenv('HOME')
+
     for i=0, n_ps-1 do begin
         file = ps_files[i]
         pos = strpos(file,'.')
-        pdf_tmp = '/home/hou/tmp/'+strmid(file,0,pos)+'.pdf'
+        pdf_tmp = home+'/tmp/'+strmid(file,0,pos)+'.pdf'
 
         pdf_files[i] = pdf_tmp
 
+        print, 'ps2pdf '+file+' '+pdf_tmp
         spawn, ['ps2pdf',file,pdf_tmp],/noshell
     endfor
     
     rand = randomu(seed,/long)
-    tex_file = '/home/hou/tmp/merge_'+strcompress(string(rand),/remove)+'.tex'
+    tex_file = home+'/tmp/merge_'+strcompress(string(rand),/remove)+'.tex'
     get_lun, unit
     openw, unit, tex_file
     printf, unit, '\documentclass{scrartcl}'
@@ -34,15 +37,17 @@ pro merge, ps_files, merged_pdf=merged_pdf
     printf, unit, '\end{document}'
 
     free_lun, unit
-
+    
+    print, 'pdflatex -interaction=batchmode '+tex_file
     spawn, ['pdflatex','-interaction=batchmode',tex_file], /noshell
         
     merged_tmp = 'merge_'+strcompress(string(rand),/remove)+'.pdf'
     if (keyword_set(merged_pdf)) then pdf_file=merged_pdf else pdf_file='merged.pdf'
-    ;spawn, ['mv',merged_tmp,pdf_file],/noshell
+    spawn, ['mv',merged_tmp,pdf_file],/noshell
 
-    ;spawn, ['rm','-rf',tex_file], /noshell
+    spawn, ['rm','-rf',tex_file], /noshell
+    spawn, ['rm -rf *.aux *.log']
     for i=0, n_ps-1 do begin
-        ;spawn, ['rm','-rf',pdf_files[i]],/noshell
+        spawn, ['rm','-rf',pdf_files[i]],/noshell
     endfor
 end

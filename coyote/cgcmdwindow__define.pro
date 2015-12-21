@@ -109,7 +109,7 @@
 ;           different versions of IDL. 23 Feb 2012. DWF.
 ;        Added ability to use IM_WIDTH keyword to set the width of raster file output
 ;           created with ImageMagick. 3 April 2012. DWF.
-;        Forgot to specify the GROUP_LEADER when calling PS_START. Caused PSConfig to
+;        Forgot to specify the GROUP_LEADER when calling cgPS_Open. Caused cgPS_Config to
 ;           run though its block when cgWindow was called from a blocking widget program.
 ;           5 June 2012. DWF.
 ;        Added the ability to save the file name and directory of the last output file, so
@@ -123,10 +123,15 @@
 ;        Added WDestroyObjects keyword to destroy objects parameters, if needed. 11 November 2012. DWF.
 ;        Not adding IM_WIDTH parameter from cgWindow_GetDefs. 19 November 2012. DWF.
 ;        Modified ReplaceEscapeSequence method to use cgCheckForSymbols. 24 November 2012. DWF.
-;        Modified to allow keywords to turn off messages from PS_START and PS_END with keywords. 27 November 2012. DWF.
+;        Modified to allow keywords to turn off messages from cgPS_Open and cgPS_Close with keywords. 27 November 2012. DWF.
 ;        The output filename was not specified correctly when making PDF file automatically. Fixed. 2 Dec 2012. DWF.
 ;        Renamed the MULTI keyword to WMULTI, as it was suppose to be. 11 Feb 2013. DWF.
 ;        Misspelled keyword in PackageCommand method. 21 February 2013. DWF.
+;        Modified GUI so there is only one Raster Image File choice, depending on if ImageMagick is
+;           installed. 21 May 2013. DWF.
+;        I made the IM_WIDTH field in the object a pointer, so it could remain an undefined variable, 
+;            if necessary. 20 FEB 2014. DWF.
+;        Typo in the spelling of DESTROYOBJECTS when restoring a graphic visualization. Fixed. 20 Feb 2015. DWF.
 ;-
 
 
@@ -285,7 +290,7 @@ FUNCTION cgCmdWindow::Init, parent, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN, 0
     ENDIF
    
@@ -328,7 +333,7 @@ FUNCTION cgCmdWindow::Init, parent, $
        PS_Encapsulated = d_ps_encapsulated, $            ; Create Encapsulated PostScript output.    
        PS_FONT = d_ps_font, $                            ; Select the font for PostScript output.
        PS_CHARSIZE = d_ps_charsize, $                    ; Select the character size for PostScript output.
-       PS_QUIET = d_ps_quiet, $                          ; Select the QUIET keyword for PS_Start.
+       PS_QUIET = d_ps_quiet, $                          ; Select the QUIET keyword for cgPS_Open.
        PS_SCALE_FACTOR = d_ps_scale_factor, $            ; Select the scale factor for PostScript output.
        PS_TT_FONT = d_ps_tt_font                         ; Select the true-type font to use for PostScript output.
         
@@ -407,24 +412,24 @@ FUNCTION cgCmdWindow::Init, parent, $
         saveID = Widget_Button(fileID, Value='Save Window As...', /MENU)
         button = Widget_Button(saveID, Value='PostScript File', UNAME='POSTSCRIPT')
         button = Widget_Button(saveID, Value='PDF File', UNAME='PDF')
-        raster = Widget_Button(saveID, Value='Raster Image File', /MENU)
-        
-        button = Widget_Button(raster, Value='BMP', UNAME='RASTER_BMP')
-        button = Widget_Button(raster, Value='GIF', UNAME='RASTER_GIF')
-        button = Widget_Button(raster, Value='JPEG', UNAME='RASTER_JPEG')
-        button = Widget_Button(raster, Value='PNG', UNAME='RASTER_PNG')
-        button = Widget_Button(raster, Value='TIFF', UNAME='RASTER_TIFF')
         
         ; If you can find ImageMagick on this machine, you can convert to better
         ; looking raster files.
         IF cgHasImageMagick() EQ 1 THEN BEGIN
-            imraster = Widget_Button(saveID, Value='Raster Image File via ImageMagick', /MENU)
+            imraster = Widget_Button(saveID, Value='Raster Image File', /MENU)
             button = Widget_Button(imraster, Value='BMP', UNAME='IMAGEMAGICK_BMP')
             button = Widget_Button(imraster, Value='GIF', UNAME='IMAGEMAGICK_GIF')
             button = Widget_Button(imraster, Value='JPEG', UNAME='IMAGEMAGICK_JPEG')
             button = Widget_Button(imraster, Value='PNG', UNAME='IMAGEMAGICK_PNG')
             button = Widget_Button(imraster, Value='TIFF', UNAME='IMAGEMAGICK_TIFF')
-        ENDIF
+        ENDIF ELSE BEGIN
+            raster = Widget_Button(saveID, Value='Raster Image File', /MENU)
+            button = Widget_Button(raster, Value='BMP', UNAME='RASTER_BMP')
+            button = Widget_Button(raster, Value='GIF', UNAME='RASTER_GIF')
+            button = Widget_Button(raster, Value='JPEG', UNAME='RASTER_JPEG')
+            button = Widget_Button(raster, Value='PNG', UNAME='RASTER_PNG')
+            button = Widget_Button(raster, Value='TIFF', UNAME='RASTER_TIFF')
+        ENDELSE
         
         button = Widget_Button(fileID, Value='Save Current Visualization', /Separator, UNAME='SAVECOMMANDS')
         button = Widget_Button(fileID, Value='Restore Visualization', UNAME='RESTORECOMMANDS')
@@ -526,7 +531,7 @@ FUNCTION cgCmdWindow::Init, parent, $
     self.im_options = d_im_options
     self.im_raster = d_im_raster
     self.im_resize = d_im_resize
-    self.im_width = d_im_width
+    self.im_width = Ptr_New(d_im_width)
     self.msysvar = Ptr_New(/Allocate_Heap)
     self.pdf_unix_convert_cmd = d_pdf_unix_convert_cmd
     self.pdf_path = d_pdf_path
@@ -622,7 +627,7 @@ PRO cgCmdWindow::Cleanup
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
@@ -633,6 +638,7 @@ PRO cgCmdWindow::Cleanup
     Ptr_Free, self.b
     Ptr_Free, self.msysvar
     Ptr_Free, self.storage
+    Ptr_Free, self.im_width
     
     ; Destroy the command objects.
     IF Obj_Valid(self.cmds) THEN BEGIN
@@ -682,7 +688,7 @@ PRO cgWindow_Command::CreateCommandStruct, structName, Quiet=quiet
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -720,34 +726,34 @@ FUNCTION cgWindow_Command::Copy
         CASE self.nparams OF
            0: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, $
                 KEYWORDS=*self.keywords, TYPE=self.type, $
-                DESTROYOBECTS=self.destroyObjects)
+                DESTROYOBJECTS=self.destroyObjects)
            1: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, $
                 KEYWORDS=*self.keywords, TYPE=self.type, $
-                DESTROYOBECTS=self.destroyObjects)
+                DESTROYOBJECTS=self.destroyObjects)
            2: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, P2=*self.p2, $
                 KEYWORDS=*self.keywords, TYPE=self.type, $
-                DESTROYOBECTS=self.destroyObjects)
+                DESTROYOBJECTS=self.destroyObjects)
            3: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, P2=*self.p2, $
                 P3=*self.p3, KEYWORDS=*self.keywords, TYPE=self.type, $
-                DESTROYOBECTS=self.destroyObjects)
+                DESTROYOBJECTS=self.destroyObjects)
            4: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, P2=*self.p2, $
                 P3=*self.p3, P4=*self.p4, KEYWORDS=*self.keywords, TYPE=self.type, $
-                DESTROYOBECTS=self.destroyObjects)
+                DESTROYOBJECTS=self.destroyObjects)
         ENDCASE
         
     ENDIF ELSE BEGIN
     
         CASE self.nparams OF
            0: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, $
-                TYPE=self.type, DESTROYOBECTS=self.destroyObjects)
+                TYPE=self.type, DESTROYOBJECTS=self.destroyObjects)
            1: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, $
-                 TYPE=self.type, DESTROYOBECTS=self.destroyObjects)
+                 TYPE=self.type, DESTROYOBJECTS=self.destroyObjects)
            2: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, P2=*self.p2, $
-                 TYPE=self.type, DESTROYOBECTS=self.destroyObjects)
+                 TYPE=self.type, DESTROYOBJECTS=self.destroyObjects)
            3: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, p2=*self.p2, P3=*self.p3, $
-                 TYPE=self.type, DESTROYOBECTS=self.destroyObjects)
+                 TYPE=self.type, DESTROYOBJECTS=self.destroyObjects)
            4: copyObj = Obj_New('cgWindow_Command', COMMAND=self.command, P1=*self.p1, p2=*self.p2, P3=*self.p3, P4=*self.p4, $
-                 TYPE=self.type, DESTROYOBECTS=self.destroyObjects)
+                 TYPE=self.type, DESTROYOBJECTS=self.destroyObjects)
         ENDCASE
     
     ENDELSE
@@ -785,7 +791,7 @@ PRO cgWindow_Command::Draw, SUCCESS=success, KEYWORDS=keywords
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         success = 0
         RETURN
     ENDIF
@@ -931,7 +937,7 @@ FUNCTION cgWindow_Command::EvaluateKeywords, keywords, SUCCESS=success
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
      success = 0
-     void = Error_Message()
+     void = cgErrorMsg()
      IF N_Elements(keywords) NE 0 THEN RETURN, keywords ELSE RETURN, 0
   ENDIF
   
@@ -1006,7 +1012,7 @@ PRO cgWindow_Command::List, prefix
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -1050,7 +1056,7 @@ FUNCTION cgWindow_Command::ReplaceEscapeSequences, aString
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(aString) EQ 0 THEN RETURN, "" ELSE RETURN, aString
     ENDIF
     
@@ -1169,7 +1175,7 @@ FUNCTION cgWindow_Command::INIT, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN, 0
     ENDIF
 
@@ -1253,7 +1259,7 @@ PRO cgCmdWindow::AddCommand, command,  INDEX=index
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -1279,10 +1285,10 @@ PRO cgCmdWindow::AutoPostScriptFile, filename
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         
         ; Close the PostScript file.
-        PS_END, /NoFix     
+        cgPS_Close, /NoFix     
 
         ; Set the window index number back.
         IF N_Elements(currentWindow) NE 0 THEN BEGIN
@@ -1299,7 +1305,7 @@ PRO cgCmdWindow::AutoPostScriptFile, filename
     IF N_Elements(filename) EQ 0 THEN filename='cgwindow.ps'
 
     ; Allow the user to configure the PostScript file.
-    PS_Start, GUI=0, $
+    cgPS_Open, GUI=0, $
         FILENAME=filename, $
         DECOMPOSED=self.ps_decomposed, $
         EUROPEAN=self.ps_metric, $
@@ -1315,7 +1321,7 @@ PRO cgCmdWindow::AutoPostScriptFile, filename
     self -> ExecuteCommands
     
     ; Clean up.
-    PS_End, NOMESSAGE=self.ps_quiet
+    cgPS_Close, NOMESSAGE=self.ps_quiet
 
     ; Set the window index number back.
     IF WindowAvailable(currentWindow) THEN WSet, currentWindow ELSE WSet, -1
@@ -1341,10 +1347,10 @@ PRO cgCmdWindow::AutoRasterFile, filetype, filename
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         
         ; Close the PostScript file.
-        PS_END, /NoFix     
+        cgPS_Close, /NoFix     
 
         ; Set the window index number back.
         IF N_Elements(currentWindow) NE 0 THEN BEGIN
@@ -1376,12 +1382,12 @@ PRO cgCmdWindow::AutoRasterFile, filetype, filename
        
            thisname = outputFilename + '.ps'
            outname = outputFilename + '.pdf'
-           PS_Start, $
+           cgPS_Open, $
                 DECOMPOSED=self.ps_decomposed, $
                 FILENAME=thisname, $
                 GROUP_LEADER=self.tlb, $
                 METRIC=self.ps_metric, $
-                KEYWORDS=keywords, $ ; Returned PSConfig keywords.
+                KEYWORDS=keywords, $ ; Returned cgPS_Config keywords.
                 SCALE_FACTOR=self.ps_scale_factor, $
                 CHARSIZE=self.ps_charsize, $
                 FONT=self.ps_font, $
@@ -1392,7 +1398,7 @@ PRO cgCmdWindow::AutoRasterFile, filetype, filename
            self -> ExecuteCommands
            
            ; Close the file and make a PDF file.
-           PS_End
+           cgPS_Close
            cgPS2PDF, thisname, outname, DELETE_PS=self.ps_delete, /SILENT, SUCCESS=success, $
               UNIX_CONVERT_CMD=self.pdf_unix_convert_cmd, GS_PATH=self.pdf_path
            IF ~success THEN BEGIN
@@ -1413,12 +1419,12 @@ PRO cgCmdWindow::AutoRasterFile, filetype, filename
         
            ; Create a PostScript file first.
            thisname = outputFilename + '.ps'
-           PS_Start, $
+           cgPS_Open, $
                 DECOMPOSED=self.ps_decomposed, $
                 FILENAME=thisname, $
                 GROUP_LEADER=self.tlb, $
                 METRIC=self.ps_metric, $
-                KEYWORDS=keywords, $ ; Returned PSConfig keywords.
+                KEYWORDS=keywords, $ ; Returned cgPS_Config keywords.
                 SCALE_FACTOR=self.ps_scale_factor, $
                 CHARSIZE=self.ps_charsize, $
                 FONT=self.ps_font, $
@@ -1438,31 +1444,31 @@ PRO cgCmdWindow::AutoRasterFile, filetype, filename
 
            ; Close the file and convert to proper file type.
             CASE filetype OF
-                'BMP':  PS_END, /BMP, DELETE_PS=self.ps_delete, $
+                'BMP':  cgPS_Close, /BMP, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width, NOMESSAGE=self.ps_quiet
-                'GIF':  PS_END, /GIF, DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width, NOMESSAGE=self.ps_quiet
+                'GIF':  cgPS_Close, /GIF, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width, NOMESSAGE=self.ps_quiet
-                'JPEG': PS_END, /JPEG, DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width, NOMESSAGE=self.ps_quiet
+                'JPEG': cgPS_Close, /JPEG, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width, NOMESSAGE=self.ps_quiet
-                'PNG':  PS_END, /PNG,  DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width, NOMESSAGE=self.ps_quiet
+                'PNG':  cgPS_Close, /PNG,  DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width, NOMESSAGE=self.ps_quiet
-                'TIFF': PS_END, /TIFF, DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width, NOMESSAGE=self.ps_quiet
+                'TIFF': cgPS_Close, /TIFF, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width, NOMESSAGE=self.ps_quiet
+                            WIDTH=*self.im_width, NOMESSAGE=self.ps_quiet
            ENDCASE
            ;IF ~self.ps_quiet THEN Print, 'Output file is located here: ' + outfilename
            END
@@ -1510,7 +1516,7 @@ PRO cgCmdWindow::Copy, $
    Catch, theError
    IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
    ENDIF
     
@@ -1616,7 +1622,7 @@ PRO cgCmdWindow::DrawWidgetEvents, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
@@ -1647,10 +1653,10 @@ PRO cgCmdWindow::CreatePostScriptFile, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         
         ; Close the PostScript file.
-        PS_END, /NoFix     
+        cgPS_Close, /NoFix     
 
         ; Set the window index number back.
         IF N_Elements(currentWindow) NE 0 THEN BEGIN
@@ -1674,7 +1680,7 @@ PRO cgCmdWindow::CreatePostScriptFile, event
     ENDELSE
 
     ; Allow the user to configure the PostScript file.
-    PS_Start, /GUI, $
+    cgPS_Open, /GUI, $
         CANCEL=cancelled, $
         CHARSIZE=self.ps_charsize, $
         DECOMPOSED=self.ps_decomposed, $
@@ -1697,7 +1703,7 @@ PRO cgCmdWindow::CreatePostScriptFile, event
     self -> ExecuteCommands
     
     ; Clean up.
-    PS_End
+    cgPS_Close
     
     ; Set the window index number back.
     IF WindowAvailable(currentWindow) THEN WSet, currentWindow ELSE WSet, -1
@@ -1724,7 +1730,7 @@ PRO cgCmdWindow::DeleteCommand, cmdIndex, ALL=all
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -1769,7 +1775,7 @@ PRO cgCmdWindow_Dispatch_Events, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -1813,7 +1819,7 @@ PRO cgCmdWindow::ExecuteCommands
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         !P.Multi = thisMulti
         !X.OMargin = thisXOmargin
         !Y.OMargin = thisYOmargin
@@ -1927,7 +1933,7 @@ FUNCTION cgCmdWindow::GetCommandKeyword, keyword, cmdIndex, SUCCESS=success
 
     Catch, theError
     IF theError NE 0 THEN BEGIN
-        void = Error_Message()
+        void = cgErrorMsg()
         success = 0
         RETURN, success
     ENDIF
@@ -2020,14 +2026,14 @@ END ;---------------------------------------------------------------------------
 ;         Set this keyword to zero if you want to keep the PostScript output ImageMagick creates
 ;         when making raster file output.
 ;     ps_encapsulated: out, optional, type=boolean, default=0
-;         Set this keyword to configure PSCONFIG to produce encapsulated PostScript output by default.
+;         Set this keyword to configure cgPS_Config to produce encapsulated PostScript output by default.
 ;     ps_font: out, optional, type=integer
 ;         Set this keyword to the type of font you want to use in PostScript output. It sets the 
-;         FONT keyword on the PSConfig command. Normally, 0 (hardware fonts) or 1 (true-type fonts).
+;         FONT keyword on the cgPS_Config command. Normally, 0 (hardware fonts) or 1 (true-type fonts).
 ;     ps_metric: out, optional, type=boolean, default=0
-;         Set this keyword to configure PSCONFIG to use metric values and A4 page size in its interface.
+;         Set this keyword to configure cgPS_Config to use metric values and A4 page size in its interface.
 ;     ps_quiet: out, optional, type=boolean, default=0
-;         Set this keyword to set the QUIET keyword on PS_Start.
+;         Set this keyword to set the QUIET keyword on cgPS_Open.
 ;     ps_scale_factor: out, optional, type=float
 ;         Set his keyword to the PostScript scale factor you wish to use in creating PostScript output.
 ;     ps_tt_font: out, optional, type=string
@@ -2082,7 +2088,7 @@ PRO cgCmdWindow::GetProperty, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -2178,7 +2184,7 @@ PRO cgCmdWindow::ListCommand, cmdIndex, CREATECOMMANDSTRUCT=createCommandStruct
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -2240,7 +2246,7 @@ PRO cgCmdWindow::LoadColors, r, g, b, XCOLORS_DATA=colorData
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -2279,7 +2285,7 @@ PRO cgCmdWindow::Output, filename
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
@@ -2382,7 +2388,7 @@ FUNCTION cgCmdWindow::PackageCommand, command, p1, p2, p3, p4, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN, Obj_New()
     ENDIF
 
@@ -2429,7 +2435,7 @@ PRO cgCmdWindow::ReplaceCommand, command, cmdIndex, MULTI=multi
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -2470,7 +2476,7 @@ PRO cgCmdWindow::Resize, x, y
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
@@ -2513,10 +2519,10 @@ PRO cgCmdWindow::SaveAsRaster, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         
         ; Close the PostScript file.
-        PS_END, /NoFix     
+        cgPS_Close, /NoFix     
 
         ; Set the window index number back.
         IF N_Elements(currentWindow) NE 0 THEN BEGIN
@@ -2595,12 +2601,12 @@ PRO cgCmdWindow::SaveAsRaster, event
        
            thisname = outname + '.ps'
            outname = outname + '.pdf'
-           PS_Start, $
+           cgPS_Open, $
                 DECOMPOSED=self.ps_decomposed, $
                 FILENAME=thisname, $
                 GROUP_LEADER=self.tlb, $
                 METRIC=self.ps_metric, $
-                KEYWORDS=keywords, $ ; Returned PSConfig keywords.
+                KEYWORDS=keywords, $ ; Returned cgPS_Config keywords.
                 SCALE_FACTOR=self.ps_scale_factor, $
                 CHARSIZE=self.ps_charsize, $
                 FONT=self.ps_font, $
@@ -2611,7 +2617,7 @@ PRO cgCmdWindow::SaveAsRaster, event
            self -> ExecuteCommands
            
            ; Close the file and make a PDF file.
-           PS_End
+           cgPS_Close
            cgPS2PDF, thisname, outname, DELETE_PS=self.ps_delete, /SILENT, SUCCESS=success, $
               UNIX_CONVERT_CMD=self.pdf_unix_convert_cmd, GS_PATH=self.pdf_path
            IF ~success THEN BEGIN
@@ -2632,12 +2638,12 @@ PRO cgCmdWindow::SaveAsRaster, event
         
            ; Create a PostScript file first.
            thisname = outname + '.ps'
-           PS_Start, $
+           cgPS_Open, $
                 DECOMPOSED=self.ps_decomposed, $
                 FILENAME=thisname, $
                 GROUP_LEADER=self.tlb, $
                 METRIC=self.ps_metric, $
-                KEYWORDS=keywords, $ ; Returned PSConfig keywords.
+                KEYWORDS=keywords, $ ; Returned cgPS_Config keywords.
                 SCALE_FACTOR=self.ps_scale_factor, $
                 CHARSIZE=self.ps_charsize, $
                 FONT=self.ps_font, $
@@ -2657,31 +2663,31 @@ PRO cgCmdWindow::SaveAsRaster, event
            
            ; Close the file and convert to proper file type.
            CASE filetype OF
-                'BMP':  PS_END, /BMP, DELETE_PS=self.ps_delete, $
+                'BMP':  cgPS_Close, /BMP, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width
-                'GIF':  PS_END, /GIF, DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width
+                'GIF':  cgPS_Close, /GIF, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width
-                'JPEG': PS_END, /JPEG, DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width
+                'JPEG': cgPS_Close, /JPEG, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width
-                'PNG':  PS_END, /PNG,  DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width
+                'PNG':  cgPS_Close, /PNG,  DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width
-                'TIFF': PS_END, /TIFF, DELETE_PS=self.ps_delete, $
+                            WIDTH=*self.im_width
+                'TIFF': cgPS_Close, /TIFF, DELETE_PS=self.ps_delete, $
                             ALLOW_TRANSPARENT=self.im_transparent, $
                             DENSITY=self.im_density, RESIZE=self.im_resize, $
                             IM_OPTIONS=self.im_options, OUTFILENAME=outfilename, $
-                            WIDTH=self.im_width
+                            WIDTH=*self.im_width
            ENDCASE
            IF ~self.ps_quiet THEN Print, 'Output will be created here: ' + outfilename
            END
@@ -2709,7 +2715,7 @@ PRO cgCmdWindow::RestoreCommands, filename
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
 
@@ -2832,7 +2838,7 @@ PRO cgCmdWindow::SaveCommands, filename
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
@@ -2923,14 +2929,14 @@ END
 ;        Set this keyword to zero if you want to keep the PostScript output ImageMagick creates
 ;        when making raster file output.
 ;     ps_encapsulated: in, optional, type=boolean, default=0
-;        Set this keyword to configure PSCONFIG to produce encapsulated PostScript output by default.
+;        Set this keyword to configure cgPS_Config to produce encapsulated PostScript output by default.
 ;     ps_font: in, optional, type=integer
 ;        Set this keyword to the type of font you want to use in PostScript output. It sets the 
-;        FONT keyword on the PSConfig command. Normally, 0 (hardware fonts) or 1 (true-type fonts).
+;        FONT keyword on the cgPS_Config command. Normally, 0 (hardware fonts) or 1 (true-type fonts).
 ;     ps_metric: in, optional, type=boolean, default=0
-;        Set this keyword to configure PSCONFIG to use metric values and A4 page size in its interface.
+;        Set this keyword to configure cgPS_Config to use metric values and A4 page size in its interface.
 ;     ps_quiet: in, optional, type=boolean, default=0
-;        Set this keyword to set the QUIET keyword on PS_Start.
+;        Set this keyword to set the QUIET keyword on cgPS_Open.
 ;     ps_scale_factor: in, optional, type=float
 ;        Set his keyword to the PostScript scale factor you wish to use in creating PostScript output.
 ;     ps_tt_font: in, optional, type=string
@@ -2971,7 +2977,7 @@ PRO cgCmdWindow::SetProperty, $
     PS_ENCAPSULATED=ps_encapsulated, $            ; Select encapusulated PostScript output.
     PS_FONT=ps_font, $                            ; Select the font for PostScript output.
     PS_METRIC=ps_metric, $                        ; Select metric measurements in PostScript output.
-    PS_QUIET=ps_quiet, $                          ; Select the QUIET keyword for PS_Start.
+    PS_QUIET=ps_quiet, $                          ; Select the QUIET keyword for cgPS_Open.
     PS_SCALE_FACTOR=ps_scale_factor, $            ; Select the scale factor for PostScript output.
     PS_TT_FONT=ps_tt_font, $                      ; Select the true-type font to use for PostScript output.
     NOEXECUTECOMMANDS=noExecuteCommands, $ ; Set if you don't want the window to execute commands.
@@ -2989,7 +2995,7 @@ PRO cgCmdWindow::SetProperty, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     
@@ -3028,7 +3034,7 @@ PRO cgCmdWindow::SetProperty, $
     IF N_Elements(im_resize) NE 0 THEN self.im_resize = im_resize
     IF N_Elements(im_options) NE 0 THEN self.im_options = im_options
     IF N_Elements(im_raster) NE 0 then self.im_raster = im_raster
-    IF N_Elements(im_width) NE 0 then self.im_width = im_width
+    IF N_Elements(im_width) NE 0 then *self.im_width = im_width
     IF N_Elements(pdf_unix_convert_cmd) NE 0 THEN self.pdf_unix_convert_cmd = pdf_unix_convert_cmd
     IF N_Elements(pdf_path) NE 0 THEN self.pdf_path = pdf_path
     IF N_Elements(ps_decomposed) NE 0 THEN self.ps_decomposed = ps_decomposed
@@ -3136,7 +3142,7 @@ PRO cgCmdWindow__Define, class
               ps_metric: 0L, $              ; Metric measurements in PostScript.
               ps_charsize: 0.0, $           ; The character size to use for PostScript output.
               ps_font: 0, $                 ; The PostScript font to use.
-              ps_quiet: 0, $                ; Select the QUIET keyword for PS_Start.
+              ps_quiet: 0, $                ; Select the QUIET keyword for cgPS_Open.
               ps_scale_factor: 0, $         ; The PostScript scale factor.
               ps_tt_font: "", $             ; The name of a true-type font to use for PostScript output.
               
@@ -3150,7 +3156,7 @@ PRO cgCmdWindow__Define, class
               im_resize: 0L, $              ; Sets the resize parameter on ImageMagick convert command.
               im_options: "", $             ; Sets extra ImageMagick options on the ImageMagick convert command.
               im_raster: 0L, $              ; Create raster files via ImageMagick
-              im_width: 0L $                ; Sets the width of the final raster output with ImageMagick
+              im_width: Ptr_New() $         ; Sets the width of the final raster output with ImageMagick
             }
             
 END ;----------------------------------------------------------------------------------------------------------------

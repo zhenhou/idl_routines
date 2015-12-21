@@ -1,25 +1,32 @@
-pro sptsz_field_coord, ifield, theta, phi, coord=coord, map_struct=map_struct, freq=freq
+pro sptsz_field_coord, ifield, theta, phi, coord=coord, map_struct=map_struct, freq=freq, nx=nx, ny=ny, ra0=ra0, dec0=dec0, reso_arcmin=reso_arcmin, proj=proj
     
-    fields_info = lps12_fieldstruct()
+    fields_info = spt_fieldsinfo()
 
-    map_path   = fields_info[ifield].xspec_map_dir
-    if (keyword_set(freq)) then begin
-        fits_files = file_search(map_path, '*_'+strcompress(string(freq),/remove)+'_*.fits')
+    if (keyword_set(nx)) then begin
+        npixels = [nx, ny]
+        radec0 = [ra0, dec0]
     endif else begin
-        fits_files = file_search(map_path, '*.fits')
+        map_path   = fields_info[ifield].xspec_map_dir
+        if (keyword_set(freq)) then begin
+            fits_files = file_search(map_path, '*_'+strcompress(string(freq),/remove)+'_*.fits')
+        endif else begin
+            fits_files = file_search(map_path, '*.fits')
+        endelse
+
+        res = read_spt_fits(fits_files[0])
+        info = res.mapinfo
+
+        nx = info.nsidex
+        ny = info.nsidey
+        ra0 = info.ra0
+        dec0 = info.dec0
+        npixels = [nx, ny]
+        radec0  = [ra0, dec0]
+        reso_arcmin = info.reso_arcmin
+        ;proj = info.projection
+
+        map_struct = expand_fits_struct(res)
     endelse
-
-    res = read_spt_fits(fits_files[0])
-    info = res.mapinfo
-
-    nx = info.nsidex
-    ny = info.nsidey
-    ra0 = info.ra0
-    dec0 = info.dec0
-    npixels = [nx, ny]
-    radec0  = [ra0, dec0]
-    reso_arcmin = info.reso_arcmin
-    proj = info.projection
 
     pix2ang_anyproj, npixels, radec0, reso_arcmin, ra, dec, proj=proj
 
@@ -35,8 +42,6 @@ pro sptsz_field_coord, ifield, theta, phi, coord=coord, map_struct=map_struct, f
     endif else begin
         print, "Please do coord=G for now."
     endelse
-
-    map_struct = expand_fits_struct(res)
     
     return
 end

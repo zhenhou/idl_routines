@@ -92,7 +92,7 @@ FUNCTION cgKML_File::INIT, filename, HINT=hint
   Catch, theError
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
-     void = Error_Message()
+     void = cgErrorMsg()
      RETURN, 0
   ENDIF
   
@@ -128,7 +128,7 @@ PRO cgKML_File::Add, theObject
   Catch, theError
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
-     void = Error_Message()
+     void = cgErrorMsg()
      RETURN
   ENDIF
   
@@ -163,7 +163,7 @@ PRO cgKML_File::Body, LUN=lun
   Catch, theError
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
-     void = Error_Message()
+     void = cgErrorMsg()
      RETURN
   ENDIF
   
@@ -231,7 +231,7 @@ PRO cgKML_File::Head, LUN=lun
   Catch, theError
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
-     void = Error_Message()
+     void = cgErrorMsg()
      RETURN
   ENDIF
   
@@ -258,8 +258,12 @@ END
 ;         A string array of files that should be included in the KMZ file
 ;         along with the KML file. Will search for files, in not included.
 ;     kmz: in, required, type=boolean, default=0
-;         If this keyword is set, the KML file is zipped into a KMZ. Only available for IDL 8.0
-;         and higher.
+;         If this keyword is set, the KML file is zipped into a KMZ file. This 
+;         functionality is only available if you have installed the Open Source 
+;         `7-Zip compression program <http://www.7-zip.org/>' and set up the path
+;         to 7z.exe correctly in cgKML2KMZ. If you don't understand, please don't
+;         set this keyword!
+;        
 ;-
 PRO cgKML_File::Save, KMZ=kmz, SupportFiles=supportFiles
 
@@ -268,7 +272,7 @@ PRO cgKML_File::Save, KMZ=kmz, SupportFiles=supportFiles
   Catch, theError
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
-     void = Error_Message()
+     void = cgErrorMsg()
      RETURN
   ENDIF
   
@@ -326,7 +330,7 @@ PRO cgKML_File::Tail, LUN=lun
   Catch, theError
   IF theError NE 0 THEN BEGIN
      Catch, /CANCEL
-     void = Error_Message()
+     void = cgErrorMsg()
      RETURN
   ENDIF
   

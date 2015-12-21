@@ -46,7 +46,14 @@ function get_tickname, xytv
     return, xytn
 end
 
-pro plot_2d_grid, path, prefix, params, ps_file, paramnames=paramnames, colorset=colorset, params_range=params_range, params_scale=params_scale, xy_charsize=xy_charsize
+pro plot_2d_grid, path, prefix, params, ps_file, paramnames=paramnames, colorset=colorset, params_range=params_range, params_scale=params_scale, xy_charsize=xy_charsize, $
+    side_width=side_width, pos_x0=pos_x0, pos_y0=pos_y0, xtitle_margin=xtitle_margin, ytitle_margin=ytitle_margin
+
+    if (not keyword_set(side_width)) then side_width=0.93
+    if (not keyword_set(pos_x0)) then pos_x0 = 0.05
+    if (not keyword_set(pos_y0)) then pos_y0 = 0.05
+    if (not keyword_set(xtitle_margin)) then xtitle_margin = 0.05
+    if (not keyword_set(ytitle_margin)) then ytitle_margin = 0.05
 
     extend_scale = 0.00
 
@@ -146,11 +153,11 @@ pro plot_2d_grid, path, prefix, params, ps_file, paramnames=paramnames, colorset
         endfor
     endfor
 
-    dy = 0.93/nparams
+    dy = side_width/nparams
     dx = dy*3.00/4.00
 
-    x0 = 0.05
-    y0 = 0.05
+    x0 = pos_x0
+    y0 = pos_y0
 
     ;;set_plot,'ps'
 	;;device, filename=ps_file, /color, bit=32
@@ -289,11 +296,11 @@ pro plot_2d_grid, path, prefix, params, ps_file, paramnames=paramnames, colorset
             endif
 
             if (ix eq 0) then begin
-                xyouts, x1-0.03, 0.5*(y1+y2), pnames[iy], charsize=6.0/nparams, alignment=0.5, orientation=90, /normal
+                xyouts, x1-ytitle_margin, 0.5*(y1+y2), pnames[iy], charsize=6.0/nparams, alignment=0.5, orientation=90, /normal
             endif
 
             if (iy eq nparams-1) then begin
-                xyouts, 0.5*(x1+x2), y1-0.04, pnames[ix], charsize=6.0/nparams, alignment=0.5, /normal
+                xyouts, 0.5*(x1+x2), y1-xtitle_margin, pnames[ix], charsize=6.0/nparams, alignment=0.5, /normal
             endif
 
             plot, [0,1], [0,1], xstyle=1, ystyle=1, xrange=[0,1], yrange=[0,1], position=pos, /noerase, $

@@ -175,7 +175,7 @@ FUNCTION cgPixmapWindow::INIT, parent, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN, 0
     ENDIF
     
@@ -228,7 +228,7 @@ FUNCTION cgPixmapWindow::INIT, parent, $
        PS_Encapsulated = d_ps_encapsulated, $            ; Create Encapsulated PostScript output.    
        PS_FONT = d_ps_font, $                            ; Select the font for PostScript output.
        PS_CHARSIZE = d_ps_charsize, $                    ; Select the character size for PostScript output.
-       PS_QUIET = d_ps_quiet, $                          ; Select the QUIET keyword for PS_Start.
+       PS_QUIET = d_ps_quiet, $                          ; Select the QUIET keyword for cgPS_Open.
        PS_SCALE_FACTOR = d_ps_scale_factor, $            ; Select the scale factor for PostScript output.
        PS_TT_FONT = d_ps_tt_font                         ; Select the true-type font to use for PostScript output.
         
@@ -331,7 +331,7 @@ FUNCTION cgPixmapWindow::INIT, parent, $
     self.im_options = d_im_options
     self.im_raster = d_im_raster
     self.im_resize = d_im_resize
-    self.im_width = d_im_width
+    self.im_width = Ptr_New(d_im_width)
     self.msysvar = Ptr_New(/Allocate_Heap)
     self.pdf_unix_convert_cmd = d_pdf_unix_convert_cmd
     self.pdf_path = d_pdf_path
@@ -382,7 +382,7 @@ PRO cgPixmapWindow::SetProperty, VISIBLE=visible, _EXTRA=extra
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
     

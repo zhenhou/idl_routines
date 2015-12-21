@@ -81,7 +81,7 @@
 ;           about the state of the color table tool into object methods. 21 October 2008. DWF.
 ;       Add REVERSE keyword and Reverse Color Table button. 12 April 2009. DWF.
 ;       In looking for a Brewer color table file, I replaced all FILE_WHICH 
-;           commands with FIND_RESOURCE_FILE commands. 28 April 2009. DWF.
+;           commands with cgFindPathTo commands. 28 April 2009. DWF.
 ;       Made sure all "NOTIFY" data structures have both a "REVERSED" and 
 ;           "BREWER" field in them to indicate the status of the XCOLORS program. Also 
 ;           inproved the documentation and made it more accurate. 20 Sept 2009. DWF.
@@ -92,7 +92,7 @@
 ;            initial colors were incorrect on subsequent calls. Also made a modification so that 
 ;            color index -1 as input is handled properly (ignored). 26 November 2010. DWF.
 ;       Added WINDOW and WINID keywords. 26 January 2011. DWF.
-;       Changed several Get_Decomposed calls to the more generic SetDecomposedState. 15 Jan 2012. DWF.
+;       Changed several Get_Decomposed calls to the more generic cgSetColorState. 15 Jan 2012. DWF.
 ;       
 ; :Copyright:
 ;     Copyright (c) 1997-2012, Fanning Software Consulting, Inc.
@@ -258,7 +258,7 @@ PRO XColors_Set, info
     
     TVLCT, r, g, b
     WSet, info.windowindex
-    SetDecomposedState, 0, Current=theState
+    cgSetColorState, 0, Current=theState
     TV, info.colorimage
     Device, Decomposed=theState
     WSet, info.thisWindow
@@ -838,7 +838,7 @@ PRO XCOLORS_SWITCH_COLORS, event
            END
 
         'BREWER': BEGIN
-           info.file = Find_Resource_File('fsc_brewer.tbl')
+           info.file = cgFindPathTo('fsc_brewer.tbl')
            info.brewer = 1
            END
    ENDCASE
@@ -1188,7 +1188,7 @@ PRO XCOLORS, $
        ; in the IDL path if it is not found there.
     
     brewerfile = Filepath(SubDir=['resource','colors'], 'fsc_brewer.tbl')
-    IF File_Test(brewerfile, /READ) EQ 0 THEN brewerfile = Find_Resource_File('fsc_brewer.tbl')
+    IF File_Test(brewerfile, /READ) EQ 0 THEN brewerfile = cgFindPathTo('fsc_brewer.tbl')
     IF brewerfile EQ "" THEN BEGIN
         locatedBrewerFile = 0 
     ENDIF ELSE BEGIN
@@ -1411,7 +1411,7 @@ PRO XCOLORS, $
     bar = BYTSCL(bar, TOP=ncolors-1) + bottom
     bar = XColors_Congrid(bar, 256, 40, /INTERP)
     WSet, windowIndex
-    SetDecomposedState, 0, Current=theState
+    cgSetColorState, 0, Current=theState
     TV, bar
     Device, Decomposed=theState
     

@@ -85,6 +85,7 @@
 ;        Added the ability to turn markers on or off with VisibleMarkers keyword and property. 29 June 2012. DWF.
 ;        Added a WID keyword to the GetProperty method to all the user to obtain the Goggle Map 
 ;            window index number. 29 Aug 2012. DWF.
+;        Goggle appreciates lat/lon values to six decimal points, so now passing all of it. 19 Feb 2015. DWF.
 ;            
 ; :Copyright:
 ;     Copyright (c) 2012, Fanning Software Consulting, Inc.
@@ -186,7 +187,7 @@ FUNCTION cgGoogleMapWidget::INIT, parent, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN, 0
     ENDIF
     
@@ -334,7 +335,7 @@ PRO cgGoogleMapWidget::CreateMapCoordObject
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        Obj_Destroy, mapCoord
        RETURN
     ENDIF
@@ -395,8 +396,8 @@ PRO cgGoogleMapWidget::Draw, SUCCESS=success
     googleString = 'http://maps.googleapis.com/maps/api/staticmap?center='
 
     ; Add the center latitude and longitude
-    googleString = googleString + String(self.centerLat,format='(F0.4)') + ',' + $
-       String(self.centerLon,format='(F0.4)')
+    googleString = googleString + String(self.centerLat,format='(F0.6)') + ',' + $
+       String(self.centerLon,format='(F0.6)')
        
     ; Add the zoom level.
     googleString = googleString + '&zoom=' + StrTrim(self.zoomLevel,2)
@@ -494,7 +495,7 @@ PRO cgGoogleMapWidget::DrawWidgetEvents, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
     ENDIF
         
@@ -519,7 +520,7 @@ FUNCTION cgGoogleMapWidget::GetMapCoord, UPDATE=update
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN, Obj_New()
     ENDIF
     
@@ -586,7 +587,7 @@ PRO cgGoogleMapWidget::GetProperty, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
     ENDIF
     
@@ -624,7 +625,7 @@ PRO cgGoogleMapWidget::Map_Type, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
     ENDIF
 
@@ -660,7 +661,7 @@ PRO cgGoogleMapWidget::Notify_Realize
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       RETURN
    ENDIF
 
@@ -744,7 +745,7 @@ PRO cgGoogleMapWidget::SetProperty, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
     ENDIF
     
@@ -792,7 +793,7 @@ PRO cgGoogleMapWidget::Zoom_In, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
     ENDIF
 
@@ -818,7 +819,7 @@ PRO cgGoogleMapWidget::Zoom_Out, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /CANCEL
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
     ENDIF
 
@@ -879,7 +880,7 @@ PRO cgGoogleMapWidget_Events, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       RETURN
    ENDIF
    

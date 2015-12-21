@@ -55,6 +55,8 @@ function read_chains, nchains, num_skip, path, prefix, savfile=savfile, single=s
         params_list[1L:nparams,0L:ct-1L] = param_cache[0L:nparams-1L,0L:ct-1L]
         weight = mult_cache[0L:ct-1L]
 
+        minlogl = min(params_list[0,*], ml_id)
+
         ;for i=0L, ct-1L do begin
         ;    istart = ip
         ;    iend = ip+mult_cache[i]-1L
@@ -71,7 +73,7 @@ function read_chains, nchains, num_skip, path, prefix, savfile=savfile, single=s
         like_cache = 0
         param_cache = 0
         
-        mcmc = create_struct('nparams',nparams, 'nsamples',ct, 'chain_lists',params_list, 'weight',weight, 'paramnames',['logL',name1])
+        mcmc = create_struct('nparams',nparams, 'nsamples',ct, 'chain_lists',params_list, 'weight',weight, 'paramnames',['logL',name1], 'minlogL',minlogl, 'minlogL_id',ml_id)
         if (savlog and (not savinfo.exists)) then save, mcmc, filename=savfile
     endelse
     return, mcmc 

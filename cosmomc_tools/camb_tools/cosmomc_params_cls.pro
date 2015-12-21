@@ -2,13 +2,15 @@ pro get_params, cmb_params=cmb_params, cos_params=cos_params
     
     cmb_params.Omegabh2  = cos_params.params_set[name2id('omegabh2',paramnames=cos_params.paramnames)]
     cmb_params.Omegach2  = cos_params.params_set[name2id('omegach2',paramnames=cos_params.paramnames)]
-    cmb_params.Omeganuh2 = cos_params.params_set[name2id('omeganuh2*',paramnames=cos_params.paramnames)]
-    cmb_params.H0        = cos_params.params_set[name2id('H0*',paramnames=cos_params.paramnames)]
-    cmb_params.yp        = cos_params.params_set[name2id('yheused*',paramnames=cos_params.paramnames)]
-    cmb_params.As        = cos_params.params_set[name2id('A*',paramnames=cos_params.paramnames)]
+    cmb_params.Omeganuh2 = cos_params.params_set[name2id('omeganuh2',paramnames=cos_params.paramnames)]
+    cmb_params.H0        = cos_params.params_set[name2id('H0',paramnames=cos_params.paramnames)]
+    cmb_params.yp        = cos_params.params_set[name2id('yheused',paramnames=cos_params.paramnames)]
+    cmb_params.As        = cos_params.params_set[name2id('A',paramnames=cos_params.paramnames)]
     cmb_params.ns        = cos_params.params_set[name2id('ns',paramnames=cos_params.paramnames)]
     cmb_params.tau       = cos_params.params_set[name2id('tau',paramnames=cos_params.paramnames)]
-    
+    ;cmb_params.nrun      = cos_params.params_set[name2id('nrun',paramnames=cos_params.paramnames)]
+    ;cmb_params.r         = cos_params.params_set[name2id('r',paramnames=cos_params.paramnames)]
+
     cmb_params.Omegak = 0.00d0
     id = name2id('omegak',paramnames=cos_params.paramnames)
     if (id ne 0) then cmb_params.Omegak = cos_params.params_set[id]
@@ -20,6 +22,14 @@ pro get_params, cmb_params=cmb_params, cos_params=cos_params
     cmb_params.neff = 3.04600d0
     id = name2id('nnu',paramnames=cos_params.paramnames)
     if (id ne 0) then cmb_params.neff = cos_params.params_set[id]
+
+    cmb_params.nrun = 0.00d0
+    id = name2id('nrun',paramnames=cos_params.paramnames)
+    if (id ne 0) then cmb_params.nrun = cos_params.params_set[id]
+
+    cmb_params.r = 0.00d0
+    id = name2id('r',paramnames=cos_params.paramnames)
+    if (id ne 0) then cmb_params.r = cos_params.params_set[id]
 
     cmb_params.Alens = 1.000d0
     id = name2id('Alens',paramnames=cos_params.paramnames)
@@ -61,7 +71,7 @@ function cosmomc_params_cls, lmax=lmax, cos_params=cos_params, old_camb=old_camb
 
     cmb_params = create_struct('lmax',lmax, 'Omegabh2',0.0d0, 'Omegach2',0.0d0, 'Omeganuh2',0.0d0, $
             'Omegak',0.0d0, 'H0',0.0d0, 'w',-1.00d0, 'yp',0.0d0, 'neff',3.046d0, 'As',0.0d0, $
-            'ns',0.0d0, 'tau',0.0d0, 'Alens',1.00d0)
+            'ns',0.0d0, 'tau',0.0d0, 'Alens',1.00d0, 'nrun',0.00d0, 'r',0.00d0)
     
     if (keyword_set(more_pnames)) then begin
         num_more_params = n_elements(more_pnames)
@@ -79,7 +89,7 @@ function cosmomc_params_cls, lmax=lmax, cos_params=cos_params, old_camb=old_camb
 
     output_root = 'idlcamb_'+strcompress(string(rand),/remove)
 
-    exe_camb_spt, cmb_params, output_root, cls, old_camb=old_camb, camb_path=camb_path, pivot_k=pivot_k, add=add
+    exe_camb, cmb_params, output_root, cls, old_camb=old_camb, camb_path=camb_path, pivot_k=pivot_k, add=add
     
     return, cls
 end

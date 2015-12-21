@@ -206,9 +206,21 @@
 ;           image, which was in turn causing the range values to be SAVED in the plotting system variables.
 ;           This interferred with backward compatibility with the TV command, so I have removed it. 31 Jan 2013. DWF. 
 ;       Whoops! Typo in my last fix. Getting too old, I guess. 6 Feb 2013. DWF.
+;       Setting any of the MISSING_*** keywords while doing multiple plots resulted in the value
+;           of !P.Multi being ignored for the image. This is fixed for now, but just a warning. Setting
+;           these keywords creates transparent images, and makes things MUCH more complicated. So, I'm 
+;           probably at the limit of what is possible now. :-) 30 April 2013. DWF.
+;       The LAYOUT keyword went on walkabout after the last changes. Restored to operation. 12 July 2013. DWF.
+;       The YTITLE keyword was missing when passed to cgWindow. Fixed now. 24 Oct 2013. DWF.
+;       Fixed a couple of places where I meant "missing_index" and used "missing_color". 26 Jan 2014. DWF.
+;       Added check for open graphics window when displaying alpha-channel image. 31 March 2014. DWF.
+;       Added XVECTOR and YVECTOR keywords. 1 April 2014. DWF.
+;       Fixed a problem in which the POSITION of the image was specified as an integer array when it 
+;            should have been a floating point array. 8 January 2015. DWF.
+;       Added compression stretch and updated retired program references. 27 Mar 2015. DWF.
 ;       
 ; :Copyright:
-;     Copyright (c) 2011-2012, Fanning Software Consulting, Inc.
+;     Copyright (c) 2011-2015, Fanning Software Consulting, Inc.
 ;-
 ;
 ;+
@@ -242,7 +254,7 @@ FUNCTION cgImage_Make_Transparent_Image, image, transparent, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         success = 0
         RETURN, 0
     ENDIF
@@ -370,7 +382,7 @@ FUNCTION cgImage_Prepare_Alpha, image, alphaBackgroundImage, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /Cancel
-       ok = Error_Message()
+       ok = cgErrorMsg()
        IF Ptr_Valid(ptr) THEN BEGIN
             image = Temporary(*ptr)
             Ptr_Free, ptr
@@ -531,6 +543,8 @@ END
 ;    clip: in, optional, type=float, default=2
 ;         A number between 0 and 50 that indicates the percentage of pixels to clip
 ;         off either end of the image histogram before performing a linear stretch.
+;    constant: in, optional, type=float, default=1.0
+;         A constant multiplier for the cgLogScl stretch.
 ;    exclude: in, optional
 ;         The value to exclude in a standard deviation stretch.
 ;    exponent: in, optional, type=float, default=4.0
@@ -581,15 +595,16 @@ END
 ;             0         None           No scaling whatsoever is done.
 ;             1         Linear         scaled = BytScl(image, MIN=minValue, MAX=maxValue)
 ;             2         Clip           A histogram stretch, with a percentage of pixels clipped at both the top and bottom
-;             3         Gamma          scaled = GmaScl(image, MIN=minValue, MAX=maxValue, Gamma=gamma)
-;             4         Log            scaled = LogScl(image, MIN=minValue, MAX=maxValue, Mean=mean, Exponent=exponent)
-;             5         Asinh          scaled = AsinhScl(image, MIN=minValue, MAX=maxValue, Beta=beta)
+;             3         Gamma          scaled = cgGmaScl(image, MIN=minValue, MAX=maxValue, Gamma=gamma)
+;             4         Log            scaled = cgLogScl(image, MIN=minValue, MAX=maxValue, Mean=mean, Exponent=exponent)
+;             5         Asinh          scaled = cgAsinhScl(image, MIN=minValue, MAX=maxValue, Beta=beta)
 ;             6         SquareRoot     A linear stretch of the square root histogram of the image values.
 ;             7         Equalization   A linear stretch of the histogram equalized image histogram.
 ;             8         Gaussian       A Gaussian normal function is applied to the image histogram.
 ;             9         MODIS          Scaling done in the differential manner of the MODIS Rapid Response Team
 ;                                      and implemented in the Coyote Library routine ScaleModis.
-;             10        StdDev         A standard deviation stretch. scaled = SDevScl(image, Multiplier=2.0).
+;             10        StdDev         A standard deviation stretch. scaled = cgSDevScl(image, Multiplier=2.0).
+;             11        Compression    Compress the mid-tones of the image. scaled = cgCompressScl(image, Constant=2.0)
 ;    sigma: in, optional, type=float, default=1.0
 ;         The sigma scale factor in a Gaussian stretch.
 ;    top: in, optional, type=integer, default=255
@@ -601,6 +616,7 @@ FUNCTION cgImage_Prepare_Output, image, xsize, ysize, $
    BOTTOM=bottom, $
    BETA=beta, $
    CLIP=clip, $
+   CONSTANT=constant, $
    EXCLUDE=exclude, $
    EXPONENT=exponent, $
    GAMMA=gamma, $
@@ -624,7 +640,7 @@ FUNCTION cgImage_Prepare_Output, image, xsize, ysize, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /Cancel
-       ok = Error_Message()
+       ok = cgErrorMsg()
        RETURN, image
     ENDIF
     
@@ -689,14 +705,15 @@ FUNCTION cgImage_Prepare_Output, image, xsize, ysize, $
 ;             0         None           No scaling whatsoever is done.
 ;             1         Linear         scaled = BytScl(image, MIN=minValue, MAX=maxValue)
 ;             2         Clip           A histogram stretch, with a percentage of pixels clipped at both the top and bottom
-;             3         Gamma          scaled = GmaScl(image, MIN=minValue, MAX=maxValue, Gamma=gamma)
-;             4         Log            scaled = LogScl(image, MIN=minValue, MAX=maxValue, Mean=mean, Exponent=exponent)
-;             5         Asinh          scaled = AsinhScl(image, MIN=minValue, MAX=maxValue, Beta=beta)
+;             3         Gamma          scaled = cgGmaScl(image, MIN=minValue, MAX=maxValue, Gamma=gamma)
+;             4         Log            scaled = cgLogScl(image, MIN=minValue, MAX=maxValue, Mean=mean, Exponent=exponent)
+;             5         Asinh          scaled = cgAsinhScl(image, MIN=minValue, MAX=maxValue, Beta=beta)
 ;             6         SquareRoot     A linear stretch of the square root histogram of the image values.
 ;             7         Equalization   A linear stretch of the histogram equalized image histogram.
 ;             8         Gaussian       A Gaussian normal function is applied to the image histogram.
 ;             9         MODIS          Scaling done in the differential manner of the MODIS Rapid Response Team
 ;             10        StdDev         A standard deviation stretch.
+;             11        Compressioni   A compression stretch of the image mid-tones.
 
           0: ; No stretch at all. 
        
@@ -706,22 +723,22 @@ FUNCTION cgImage_Prepare_Output, image, xsize, ysize, $
              END
     
           2: BEGIN ; Histogram clip stretch.
-             tempImage = ClipScl(tempImage, clip, OMIN=bottom, OMAX=top, NEGATIVE=negative)
+             tempImage = cgClipScl(tempImage, clip, OMIN=bottom, OMAX=top, NEGATIVE=negative)
              END
 
           3: BEGIN ; Gamma log scale stretch.
-             tempImage = GmaScl(tempImage, Max=maxvalue, Min=minvalue, $
+             tempImage = cgGmaScl(tempImage, Max=maxvalue, Min=minvalue, $
                        Gamma=gamma, Negative=negative, OMAX=top, OMIN=bottom)
              END
     
           4: BEGIN ; Log scale stretch.
-             tempImage =  LogScl(tempImage, Max=maxvalue, Min=minvalue, $
-                       Mean=mean, Exponent=exponent, Negative=negative, $
+             tempImage =  cgLogScl(tempImage, Max=maxvalue, Min=minvalue, $
+                       Constant=constant, Negative=negative, $
                        OMIN=bottom, OMAX=top)
              END
     
           5: BEGIN ; Hyperpolic sine stretch.
-             tempImage = ASinhScl(tempImage, Max=maxvalue, Min=minvalue, $
+             tempImage = cgASinhScl(tempImage, Max=maxvalue, Min=minvalue, $
                       BETA=beta, Negative=negative, OMAX=top, OMIN=bottom)
              END
                
@@ -741,7 +758,7 @@ FUNCTION cgImage_Prepare_Output, image, xsize, ysize, $
              END
     
           8: BEGIN ; Gaussian stretch.
-             tempImage = GaussScl(tempImage, Max=maxvalue, Min=minvalue, $
+             tempImage = cgGaussScl(tempImage, Max=maxvalue, Min=minvalue, $
                        Sigma=sigma, Negative=negative, OMIN=bottom, OMAX=top)
              END
          
@@ -750,10 +767,16 @@ FUNCTION cgImage_Prepare_Output, image, xsize, ysize, $
              END
              
           10: BEGIN ; Standard deviation stretch.
-              tempImage = SDevScl(tempImage, MULTIPLIER=multiplier, EXCLUDE=exclude, $
+              tempImage = cgSDevScl(tempImage, MULTIPLIER=multiplier, EXCLUDE=exclude, $
                    Negative=negative, OMAX=top, OMIN=bottom)
               END
                
+          11: BEGIN ; Compression scale stretch.
+                  tempImage =  cgCompressScl(tempImage, Max=maxvalue, Min=minvalue, $
+                      Mean=mean, Exponent=exponent, Negative=negative, $
+                      OMIN=bottom, OMAX=top)
+              END
+              
             ELSE: Message, 'Unknown scaling index.'
             
        ENDCASE
@@ -860,7 +883,9 @@ END
 ;    axkeywords: in, optional, type=structure
 ;         A structure of AXIS keywords and values that can be used to configure the axes
 ;         in whatever way the user desires. Many of the most often used axis keywords are available 
-;         as cgImage keywords.
+;         as cgImage keywords. For example::
+;            IDL> axis_format = {XTicks:4, XTickname:['Cow', 'Pig', 'Dog', 'Cat', 'Owl']}
+;            IDL> cgImage, cgDemoData(7), AXKEYWORDS=axis_format, /Axes, XRange=[0,20]
 ;    background: in, optional, type=string, default='white'
 ;         The name of the background color for the image display. Unlike the TV command in IDL,
 ;         the cgImage command will erase the display before executing the command like other
@@ -1047,7 +1072,7 @@ END
 ;            
 ;         All raster file output is created through PostScript intermediate files (the
 ;         PostScript files will be deleted), so ImageMagick and Ghostview MUST be installed 
-;         to produce anything other than PostScript output. (See cgPS2PDF and PS_END for 
+;         to produce anything other than PostScript output. (See cgPS2PDF and cgPS_Close for 
 ;         details.) And also note that you should NOT use this keyword when doing multiple 
 ;         plots. The keyword is to be used as a convenient way to get PostScript or raster 
 ;         output for a single graphics command. Output parameters can be set with cgWindow_SetDefs.
@@ -1147,11 +1172,15 @@ END
 ;         [0, size of image in X].
 ;    xtitle: in, optional, type=string, default=""
 ;         The X title of the image plot. Used only if `AXES` is set.
+;    xvector: in, optional
+;         A vector of X values that can be used as an alternative mthod of specifying the `XRange` of the plot.
 ;    yrange: in, optional, type=fltarr(2)
 ;         A two element array giving the Y range of the image. By default set to
 ;         [0, size of image in Y].
 ;    ytitle: in, optional, type=string, default=""
 ;         The Y title of the image plot. Used only if `AXES` is set.
+;    yvector: in, optional
+;         A vector of Y values that can be used as an alternative mthod of specifying the `YRange` of the plot.
 ;    _ref_extra: in, optional, type=varies
 ;         Any keywords defined for the TV command can be used. This applies only
 ;         if the TV keyword is set.
@@ -1218,15 +1247,17 @@ PRO cgImage, image, x, y, $
    WINDOW=window, $
    XRANGE=plotxrange, $
    XTITLE=plotxtitle, $
+   XVECTOR=xvector, $
    YRANGE=plotyrange, $
    YTITLE=plotytitle, $
+   YVECTOR=yvector, $
    _REF_EXTRA=extra
 
     ; Error handling.
     Catch, theError
     IF theError NE 0 THEN BEGIN
        Catch, /Cancel
-       ok = Error_Message()
+       ok = cgErrorMsg()
        IF N_Elements(thisMulti) NE 0 THEN !P.Multi = thisMulti
        IF transparentImage THEN image = oldImage
        RETURN
@@ -1354,8 +1385,10 @@ PRO cgImage, image, x, y, $
                TV=tv, $
                XRANGE=plotxrange, $
                XTITLE=plotxtitle, $
+               XVECTOR=xvector, $
                YRANGE=plotyrange, $
                YTITLE=plotytitle, $
+               YVECTOR=yvector, $
                ADDCMD=1, $
                _EXTRA=extra
             RETURN
@@ -1419,7 +1452,10 @@ PRO cgImage, image, x, y, $
                TV=tv, $
                XRANGE=plotxrange, $
                XTITLE=plotxtitle, $
+               XVECTOR=xvector, $
                YRANGE=plotyrange, $
+               YTITLE=plotytitle, $
+               YVECTOR=yvector, $
                REPLACECMD=replacecmd, $
                _EXTRA=extra
              RETURN
@@ -1427,6 +1463,9 @@ PRO cgImage, image, x, y, $
     
     ; Obtain information about the size of the image.
     void = Image_Dimensions(image, XSIZE=imgXSize, YSIZE=imgYSize)
+    
+    ; Doing multiple plots?
+    IF (Total(!P.Multi) GT 0) || (N_Elements(layout) NE 0) THEN multi = 1 ELSE multi = 0
     
     ; Did you specify a color table index?
     TVLCT, r_start, g_start, b_start, /Get
@@ -1442,10 +1481,10 @@ PRO cgImage, image, x, y, $
     ; If transparent is turned on, and you are not overplotting, and you have a position in the window, then
     ; you have to adjust alphafgpos and position.
     IF (N_Elements(transparent) NE 0) && ~Keyword_Set(overplot) && (N_Elements(position) NE 0) THEN BEGIN
-        IF N_Elements(alphafgpos) EQ 0 THEN BEGIN
+        IF (N_Elements(alphafgpos) EQ 0) THEN BEGIN
              restorePosition = position
              alphafgpos = position
-             position = [0,0,1,1]
+             position = [0.0,0.0,1.0,1.0]
              Message, 'POSITION keyword value switched to ALPHAFGPOS because TRANSPARENT keyword is set.', /Informational
         ENDIF
     ENDIF
@@ -1500,12 +1539,12 @@ PRO cgImage, image, x, y, $
             image = transImage
             IF (N_Elements(alphabackgroundimage) EQ 0) THEN BEGIN
                 IF !D.Name NE "PS" THEN BEGIN
-                   alphabackgroundimage = cgSnapshot(POSITION=[0,0,1,1])
+                   alphabackgroundimage = cgSnapshot(POSITION=[0.0,0.0,1.0,1.0])
                 ENDIF ELSE Message, 'An AlphaBackgroundImage is required to create transparent images in PostScript.'
             ENDIF
-            IF N_Elements(alphabgpos) EQ 0 THEN alphabgpos = [0,0,1,1]
-            IF N_Elements(alphafgpos) EQ 0 THEN alphafgpos = [0,0,1,1]
-            IF N_Elements(position) EQ 0 THEN position= [0,0,1,1]
+            IF ~multi THEN IF N_Elements(alphabgpos) EQ 0 THEN alphabgpos = [0.0,0.0,1.0,1.0]
+            IF ~multi THEN IF N_Elements(alphafgpos) EQ 0 THEN alphafgpos = [0.0,0.0,1.0,1.0]
+            IF ~multi THEN IF N_Elements(position) EQ 0 THEN position= [0.0,0.0,1.0,1.0]
             noerase = 1
         ENDIF ELSE BEGIN
             image = oldImage
@@ -1513,19 +1552,24 @@ PRO cgImage, image, x, y, $
         ENDELSE
     ENDIF
       
-    ; Need a data range? Set it up if you have a map coordinate object. Otherwise,
-    ; we will handle it later.
+    ; Need a data range? Set it up if you have a map coordinate object or a vector.
     IF N_Elements(plotxrange) EQ 0 THEN BEGIN
        IF Obj_Valid(mapCoord) THEN BEGIN
              mapCoord -> GetProperty, XRANGE=plotxrange 
              save = 1
        ENDIF 
+       IF N_Elements(xvector) NE 0 THEN BEGIN
+           plotxrange = [Min(xvector), Max(xvector)]
+       ENDIF
     ENDIF ELSE save = 1
     IF N_Elements(plotyrange) EQ 0 THEN BEGIN
        IF Obj_Valid(mapCoord) THEN BEGIN
             mapCoord -> GetProperty, YRANGE=plotyrange 
             save = 1
        ENDIF 
+       IF N_Elements(yvector) NE 0 THEN BEGIN
+           plotyrange = [Min(yvector), Max(yvector)]
+       ENDIF
     ENDIF ELSE save = 1
     
     ; Are we doing some kind of output?
@@ -1625,7 +1669,7 @@ PRO cgImage, image, x, y, $
          PS_TT_Font = ps_tt_font               ; Select the true-type font to use for PostScript output.   
        
        ; Set up the PostScript device.
-       PS_Start, $
+       cgPS_Open, $
           CHARSIZE=ps_charsize, $
           DECOMPOSED=ps_decomposed, $
           FILENAME=ps_filename, $
@@ -1674,9 +1718,6 @@ PRO cgImage, image, x, y, $
     IF N_Elements(color) EQ 0 THEN acolorname = 'opposite' ELSE acolorname = color
     interp = Keyword_Set(interp)
     
-    ; Doing multiple plots?
-    IF Total(!P.Multi) GT 0 THEN multi = 1 ELSE multi = 0
-    
     ; Check for image parameter and keywords.
     IF N_Elements(image) EQ 0 THEN MESSAGE, 'You must pass a valid image argument.'
     
@@ -1687,10 +1728,10 @@ PRO cgImage, image, x, y, $
     IF N_Elements(min) EQ 0 THEN min = Min(image, /NAN) ELSE scale = 1
     IF N_Elements(max) EQ 0 THEN max = Max(image, /NAN) ELSE scale = 1
     IF (min LT 0) OR (max GT 255) THEN scale = 1
-    IF N_Elements(top) EQ 0 THEN top = (N_Elements(missing_value) NE 0) ? !D.TABLE_SIZE - 2 : !D.TABLE_SIZE - 1
+    IF N_Elements(top) EQ 0 THEN top = (N_Elements(missing_index) NE 0) ? !D.TABLE_SIZE - 2 : !D.TABLE_SIZE - 1
     IF N_Elements(bottom) EQ 0 THEN bottom = 0B
     IF N_Elements(ncolors) NE 0 THEN BEGIN
-        top = (N_Elements(missing_value) NE 0) ? (ncolors - 2) < 255 : (ncolors - 1)
+        top = (N_Elements(missing_index) NE 0) ? (ncolors - 2) < 255 : (ncolors - 1)
         scale = 1
     ENDIF
     
@@ -1775,7 +1816,9 @@ PRO cgImage, image, x, y, $
        ; We can get the background image on devices that support windows.
        IF (!D.Flags AND 256) NE 0 THEN BEGIN
            IF N_Elements(alphabackgroundImage) EQ 0 THEN BEGIN
-               alphabackgroundImage = cgSnapshot()
+               IF !D.Window GE 0 THEN BEGIN
+                   alphabackgroundImage = cgSnapshot()
+               ENDIF ELSE Message, 'Open graphics window to display alpha channel image.'
            ENDIF
        ENDIF ELSE BEGIN
            IF N_Elements(alphabackgroundImage) EQ 0 THEN BEGIN
@@ -1975,7 +2018,7 @@ PRO cgImage, image, x, y, $
              IF N_Elements(transparent) NE 0 THEN BEGIN
                 restorePosition = position
                 alphafgpos = position
-                position = [0,0,1,1]
+                position = [0.0,0.0,1.0,1.0]
              ENDIF
           ENDIF
        ENDELSE
@@ -2031,7 +2074,7 @@ PRO cgImage, image, x, y, $
                 ENDCASE
             'PS': BEGIN
                 IF (thisRelease GE 7.1) THEN BEGIN
-                   thisDecomposed = DecomposedColor(Depth=thisDepth)
+                   thisDecomposed = cgGetColorState(Depth=thisDepth)
                    Device, Decomposed=0
                 ENDIF ELSE thisDepth = 8
                 ENDCASE
@@ -2074,7 +2117,7 @@ PRO cgImage, image, x, y, $
              ENDCASE
           'PS': BEGIN
              IF (Float(!Version.Release) GE 7.1) THEN BEGIN
-                   thisDecomposed = DecomposedColor(Depth=thisDepth)
+                   thisDecomposed = cgGetColorState(Depth=thisDepth)
                    TVLCT, r, g, b, /GET
                    LoadCT, 0, /Silent
                    Device, DECOMPOSED=1, BITS_PER_PIXEL=8, COLOR=1
@@ -2182,7 +2225,7 @@ PRO cgImage, image, x, y, $
        trialX = xpixSize
        trialY = trialX * ratio
        IF trialY GT ypixSize THEN BEGIN
-          trialY = ypixSize
+          trialY = Float(ypixSize)
           trialX = trialY / ratio
        ENDIF
     
@@ -2477,7 +2520,7 @@ PRO cgImage, image, x, y, $
            PDF_Path = pdf_path                             ; The path to the Ghostscript conversion command.
     
         ; Close the PostScript file and create whatever output is needed.
-        PS_END, DELETE_PS=delete_ps, $
+        cgPS_Close, DELETE_PS=delete_ps, $
              ALLOW_TRANSPARENT=im_transparent, $
              BMP=bmp_flag, $
              DENSITY=im_density, $

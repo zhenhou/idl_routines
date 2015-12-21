@@ -37,7 +37,7 @@ end
 
 function proj_struct, fields_info, hpx_map_file, max_order, spt_output_path=spt_output_path, spt_output_root=spt_output_root, $
          planck_output_path=planck_output_path, planck_output_root=planck_output_root, $
-         jackhalf=jackhalf, half_roots=half_roots
+         jackhalf=jackhalf, half_roots=half_roots, projection=projection, reso_arcmin=reso_arcmin
 
     num_fields = 20
 
@@ -48,6 +48,8 @@ function proj_struct, fields_info, hpx_map_file, max_order, spt_output_path=spt_
            hpx_nside: 2048L, $
            lmax: 3000L, $
            max_order: 0, $
+           projection: 5, $
+           reso_arcmin: 1.0, $
            jackhalf: 0, $
            half_files: [' ', ' '] $
     }
@@ -57,6 +59,9 @@ function proj_struct, fields_info, hpx_map_file, max_order, spt_output_path=spt_
     res = getsize_fits(hpx_map_file, nside=nside)
 
     for i_field=0, num_fields-1 do begin
+        file_mkdir, spt_output_path+'/'+fields_info[i_field].name
+        file_mkdir, planck_output_path+'/'+fields_info[i_field].name
+
         proj[i_field].theta_file = spt_output_path+'/'+fields_info[i_field].name+'/'+spt_output_root+'_theta'
         proj[i_field].phi_file = spt_output_path+'/'+fields_info[i_field].name+'/'+spt_output_root+'_phi'
         proj[i_field].prj_file = planck_output_path+'/'+fields_info[i_field].name+'/'+planck_output_root+'_prj'
@@ -64,6 +69,8 @@ function proj_struct, fields_info, hpx_map_file, max_order, spt_output_path=spt_
         proj[i_field].hpx_nside = nside
         proj[i_field].lmax = 2L*nside
         proj[i_field].max_order = max_order
+        proj[i_field].projection = projection
+        proj[i_field].reso_arcmin = reso_arcmin
 
         if keyword_set(jackhalf) and jackhalf eq 1 then begin
             proj[i_field].jackhalf = 1
@@ -110,15 +117,15 @@ pro write_prj_fits, proj, fields_info, spt_freq=spt_freq
         prj_file = proj[i_field].prj_file
         prj_info = file_info(prj_file)
         
-        if (getenv('HOSTNAME') eq 'spt') then begin
-            map_path = fields_info[i_field].xspec_map_dir
-            if (keyword_set(spt_freq)) then begin
-                fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
-            endif else begin
-                fits_files = file_search(map_path, '*.fits')
-            endelse
-            res = read_spt_fits(fits_files[0])
-        endif
+        ;if (getenv('HOSTNAME') eq 'spt') then begin
+        ;    map_path = fields_info[i_field].xspec_map_dir
+        ;    if (keyword_set(spt_freq)) then begin
+        ;        fits_files = file_search(map_path, '*_'+strcompress(string(spt_freq),/remove)+'_*.fits')
+        ;    endif else begin
+        ;        fits_files = file_search(map_path, '*.fits')
+        ;    endelse
+        ;    res = read_spt_fits(fits_files[0])
+        ;endif
     
         if (getenv('HOSTNAME') eq 'midway') then begin
             fits_file = '/home/zhenhou/scratch-data/projects/spt_x_planck/planck_2013/reproj/'+fields_info[i_field].name+'/hfi_SkyMap_143_nominal_ringfull_maxOrder4_prj.fits'
@@ -136,37 +143,49 @@ pro write_prj_fits, proj, fields_info, spt_freq=spt_freq
             readu, unit, prj_data
             free_lun, unit
 
-            array_1dto2d, prj_data, prj_2d, $
-            nx=map_struct.mapinfo.nsidex, ny=map_struct.mapinfo.nsidey
+            nx = fields_info[i_field].nx_clt
+            ny = fields_info[i_field].ny_clt
 
-            map_struct.map.map = prj_2d
+            prj_2d = reform(prj_data, nx, ny)
+            map_struct.mapinfo.nsidex = nx
+            map_struct.mapinfo.nsidey = ny
+            map_struct.mapinfo.projection = proj[i_field].projection
+            
+            map_struct.mapinfo.ra0  = fields_info[i_field].ra0_clt
+            map_struct.mapinfo.dec0 = fields_info[i_field].dec0_clt
+            map_struct.mapinfo.reso_arcmin = proj[i_field].reso_arcmin
 
-            if proj[i_field].jackhalf then begin
-                prj_half1 = dblarr(num_pixels)
-                prj_half2 = dblarr(num_pixels)
-                half1_file = proj[i_field].half_files[0]
-                get_lun, unit
-                openr, unit, half1_file
-                readu, unit, prj_half1
-                free_lun, unit
+            ;map_struct.map.map = prj_2d
+            map_str = create_struct('MAP',prj_2d)
 
-                half2_file = proj[i_field].half_files[1]
-                get_lun, unit
-                openr, unit, half2_file
-                readu, unit, prj_half2
-                free_lun, unit
+            ;if proj[i_field].jackhalf then begin
+            ;    prj_half1 = dblarr(num_pixels)
+            ;    prj_half2 = dblarr(num_pixels)
+            ;    half1_file = proj[i_field].half_files[0]
+            ;    get_lun, unit
+            ;    openr, unit, half1_file
+            ;    readu, unit, prj_half1
+            ;    free_lun, unit
 
-                dhalf = prj_half1 - prj_half2
-                array_1dto2d, dhalf, dhalf_2d, $
-                nx=map_struct.mapinfo.nsidex, ny=map_struct.mapinfo.nsidey
+            ;    half2_file = proj[i_field].half_files[1]
+            ;    get_lun, unit
+            ;    openr, unit, half2_file
+            ;    readu, unit, prj_half2
+            ;    free_lun, unit
 
-                map_struct.dmap.map = dhalf_2d
-            endif else begin
-                map_struct.dmap.map[*] = 0.0
-            endelse
+            ;    dhalf = prj_half1 - prj_half2
+            ;    array_1dto2d, dhalf, dhalf_2d, $
+            ;    nx=map_struct.mapinfo.nsidex, ny=map_struct.mapinfo.nsidey
+
+            ;    map_struct.dmap.map = dhalf_2d
+            ;endif else begin
+            ;    map_struct.dmap.map[*] = 0.0
+            ;endelse
+
+            map_write = create_struct('MAP',map_str, 'MAPINFO',map_struct.mapinfo)
 
             fits_file = prj_file+'.fits'
-            write_processed_fits, map_struct, fits_file
+            write_processed_fits, map_write, fits_file
             print, 'written - ',fits_file
         endif else begin
             print, 'prj_file: '+prj_file
@@ -179,18 +198,11 @@ end
 pro proj_planck_sptsz, max_order, planck_map_file=planck_map_file, rewrite_thetaphi=rewrite_thetaphi, $
     spt_output_path=spt_output_path, spt_output_root=spt_output_root, spt_freq=spt_freq, $
     planck_output_path=planck_output_path, planck_output_root=planck_output_root, $
-    jackhalf=jackhalf, half_roots=half_roots
+    jackhalf=jackhalf, half_roots=half_roots, projection=projection, reso_arcmin=reso_arcmin
 
-    hostname = getenv('HOSTNAME')
+    home = getenv('HOME')
 
-    if (hostname eq 'spt') then begin
-        data_path = '/data23/hou/'
-        user = 'hou'
-    endif
-    if (hostname eq 'midway') then begin
-        data_path = '/home/zhenhou/scratch-midway2/'
-        user = 'zhenhou'
-    endif
+    data_path = home+'/data/'
 
     if (not keyword_set(spt_output_path)) then spt_output_path = data_path+'projects/spt_x_planck/reproj/'
     if (not keyword_set(planck_output_path)) then planck_output_path = data_path+'projects/spt_x_planck/reproj/'
@@ -199,10 +211,10 @@ pro proj_planck_sptsz, max_order, planck_map_file=planck_map_file, rewrite_theta
     if (not keyword_set(planck_map_file)) then $
     planck_map_file=data_path+'planck_data/2014/all_sky_maps/single_field_maps/HFI_SkyMap_RING_143_2048_R1.10_nominal.fits'
     
-    fields = lps12_fieldstruct()
+    fields = spt_fieldsinfo()
     proj   = proj_struct(fields, planck_map_file, max_order, spt_output_path=spt_output_path, spt_output_root=spt_output_root, $
              planck_output_path=planck_output_path, planck_output_root=planck_output_root, $
-             jackhalf=jackhalf, half_roots=half_roots)
+             jackhalf=jackhalf, half_roots=half_roots, projection=projection, reso_arcmin=reso_arcmin)
 
     ;; make ini file for fortran program ;;
     ini_file = 'ini_zone/'+planck_output_root+'_PRJTO_'+spt_output_root+'.ini'
@@ -226,7 +238,10 @@ pro proj_planck_sptsz, max_order, planck_map_file=planck_map_file, rewrite_theta
         phi_info   = file_info(phi_file)
         prj_info   = file_info(prj_file)
         if ((not theta_info.exists) or (not phi_info.exists) or keyword_set(rewrite_thetaphi)) then begin
-            sptsz_field_coord, i_field, theta, phi, coord='G', map_struct=map, freq=spt_freq
+            
+            sptsz_field_coord, i_field, theta, phi, coord='G', freq=spt_freq, $
+            nx=fields[i_field].nx_clt, ny=fields[i_field].ny_clt, $
+            ra0=fields[i_field].ra0_clt, dec0=fields[i_field].dec0_clt, reso_arcmin=reso_arcmin, proj=proj[i_field].projection
 
             array_2dto1d, theta, theta_1d
             array_2dto1d, phi,   phi_1d
@@ -247,12 +262,13 @@ pro proj_planck_sptsz, max_order, planck_map_file=planck_map_file, rewrite_theta
         prj_exists += long(prj_info.exists)
     endfor
     
-    hpx_taylor = '/home/'+user+'/Projects/projects/spt_x_planck/reproj/healpix_taylor/hpx_taylor'
+    hpx_taylor = home+'/Projects/projects/spt_x_planck/proc_maps/reproj/healpix_taylor/hpx_taylor'
     if (prj_exists eq num_fields) then begin
         print, "all prj files ready. skip hpx_taylor."
     endif else begin
         spawn, [hpx_taylor, ini_file], /noshell
     endelse
+	
 
     write_prj_fits, proj, fields, spt_freq=spt_freq
 end

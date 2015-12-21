@@ -42,13 +42,14 @@
 ;       LINEAR         Linear stretch between end points.
 ;       CLIP           Linear, except a 2% of pixels are clipped at either end of histogram.
 ;       GAMMA          An exponential function.
-;       LOG            An S-shaped log function.
+;       LOG            A natural logarithmic function, similar to gamma but with fixed shape.
 ;       ASINH          An inverse hyperbolic sine function (strong log function).
 ;       SQUARE ROOT    The square-root of the image pixels is stretched linearly.
 ;       EQUALIZATION   Image histogram is equalized before stretching.
 ;       ADAPTIVE EQUALIZATION Image histogram is equalized with Adapt_Hist_Equal before stretching.
 ;       GAUSSIAN       A gaussian normal distribution function is applied to the stretch.
 ;       STDDEV         The image is stretched by multiples of its standard deviation from its mean value.
+;       COMPRESSION    The mid-tones of the image are compressed by varying amounts.
 ;
 ; .. image:: cgstretch.png
 ; 
@@ -77,6 +78,8 @@
 ;     Change History::
 ;        Written by David W. Fanning, April 1996, as XStretch.
 ;        XStretch retired and the program was renamed cgStretch, 21 October 2012.
+;        Added Compression stretch and updated to Coyote Graphics stretch functions. 27 March 2015. DWF.
+;        Missed a couple of retire program name changes in the program. 7 April 2015. DWF.
 ;
 ; :Copyright:
 ;     Copyright (c) 1996-2012, Fanning Software Consulting, Inc.
@@ -102,7 +105,7 @@ FUNCTION cgSTRETCH_VALIDATE_THRESHOLD, threshold, info
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, Cancel=1
-      void = Error_Message(/Traceback)
+      void = cgErrorMsg(/Traceback)
       RETURN, threshold
    ENDIF
 
@@ -149,7 +152,7 @@ FUNCTION cgSTRETCH_SCALEIMAGE, info
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, Cancel=1
-      void = Error_Message(/Traceback)
+      void = cgErrorMsg(/Traceback)
       RETURN, *info.image
    ENDIF
 
@@ -185,13 +188,13 @@ FUNCTION cgSTRETCH_SCALEIMAGE, info
          END
 
       'GAMMA': BEGIN
-         scaledImage = GmaScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
+         scaledImage = cgGmaScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
                    Gamma=info.gamma, Negative=info.negative)
          RETURN, scaledImage
          END
 
       'GAUSSIAN': BEGIN
-         scaledImage = GaussScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
+         scaledImage = cgGaussScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
                    Sigma=info.sigma, Negative=info.negative)
          RETURN, scaledImage
          END
@@ -202,21 +205,27 @@ FUNCTION cgSTRETCH_SCALEIMAGE, info
          RETURN, scaledImage
          END
 
-      'LOG': BEGIN
-         scaledImage =  LogScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
+      'COMPRESSION': BEGIN
+         scaledImage =  cgCompressScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
                    Mean=info.mean, Exponent=info.exponent, Negative=info.negative)
          RETURN, scaledImage
          END
 
+      'LOG': BEGIN
+             scaledImage =  cgLogScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
+                 Constant=info.constant, Negative=info.negative)
+             RETURN, scaledImage
+         END
+         
       'ASINH' :BEGIN
-         scaledImage = ASinhScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
+         scaledImage = cgASinhScl(*info.image, Max=info.maxThresh, Min=info.minThresh, $
                   BETA=info.beta, Negative=info.negative)
          RETURN, scaledImage
          END
 
       'STDDEV': BEGIN
-          scaledImage = BytScl(cgImgScl(*info.image, Stretch=10, Multiplier=info.multiplier, $
-             Exclude=*info.exclude), Max=info.maxThresh, Min=info.minThresh, /NAN)
+          scaledImage = cgSDevScl(*info.image, Multiplier=info.multiplier, $
+             Exclude=*info.exclude, OMax=info.maxThresh, OMin=info.minThresh)
          RETURN, scaledImage
          END
    ENDCASE
@@ -267,7 +276,7 @@ PRO cgSTRETCH_SAVETOMAIN, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -415,7 +424,7 @@ PRO cgSTRETCH_DRAWLINES, minThresh, maxThresh, info
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, Cancel=1
-      void = Error_Message(/Traceback)
+      void = cgErrorMsg(/Traceback)
       RETURN
    ENDIF
 
@@ -486,76 +495,83 @@ PRO cgSTRETCH_DRAWLINES, minThresh, maxThresh, info
 
       'LINEAR': BEGIN
             line = BytScl(Findgen(101))
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'LINEAR 2%': BEGIN
             line = BytScl(Findgen(101))
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'ADAPTIVE EQUALIZATION': BEGIN
             line = BytScl(Findgen(101))
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'EQUALIZATION': BEGIN
             line = BytScl(Findgen(101))
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'LOG': BEGIN
-            line = LogScl(Findgen(101), Mean=info.mean, Exponent=info.exponent)
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgLogScl(Findgen(101), Constant=constant)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
+         END
+
+      'COMPRESSION': BEGIN
+             line = cgCompressScl(Findgen(101), Mean=info.mean, Exponent=info.exponent)
+             line = cgScaleVector(line, 0.0, !Y.CRange[1])
+             x = cgScaleVector(Findgen(101), minThresh, maxThresh)
+             cgOPlot, x, line, Color=info.colors[4], LineStyle=2, Thick=2
          END
 
       'GAMMA': BEGIN
             ; Draw the gamma function.
-            line = Scale_Vector(Findgen(101), 0.0, 1.0)
+            line = cgScaleVector(Findgen(101), 0.0, 1.0)
             line = Double(line)^info.gamma
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'GAUSSIAN': BEGIN
             ; Draw the gaussian function.
-            line = Scale_Vector(Findgen(101), -!PI, !PI)
+            line = cgScaleVector(Findgen(101), -!PI, !PI)
             line = (1/(2*!PI*info.sigma^2))*EXP(-(line^2/(2*info.sigma^2)))
-            line = Scale_Vector(line, 0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'SQUARE ROOT': BEGIN
             line = BytScl(Findgen(101))
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'ASINH': BEGIN
             ; Draw the asinh function.
-            line = ASinhScl(Findgen(101), BETA=info.beta)
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-             x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgASinhScl(Findgen(101), BETA=info.beta)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+             x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
       'STDDEV': BEGIN
             line = BytScl(Findgen(101))
-            line = Scale_Vector(line, 0.0, !Y.CRange[1])
-            x = Scale_Vector(Findgen(101), minThresh, maxThresh)
+            line = cgScaleVector(line, 0.0, !Y.CRange[1])
+            x = cgScaleVector(Findgen(101), minThresh, maxThresh)
             OPlot, x, line, Color=cgColor(info.colors[4]), LineStyle=2, Thick=2
          END
 
@@ -580,7 +596,7 @@ PRO cgSTRETCH_NOTIFYOTHERS, info
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, Cancel=1
-      void = Error_Message()
+      void = cgErrorMsg()
       RETURN
    ENDIF
 
@@ -641,7 +657,7 @@ PRO cgSTRETCH_HISTOPLOT, info, $
    Catch, theError
    IF theError NE 0 THEN BEGIN
        Catch, Cancel=1
-       void = Error_Message()
+       void = cgErrorMsg()
        RETURN
    ENDIF
 
@@ -839,7 +855,7 @@ PRO cgSTRETCH_PARAMETERS, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -850,7 +866,7 @@ PRO cgSTRETCH_PARAMETERS, event
    ; Make sure you have the latest values for alpha and beta.
    CASE info.type OF
 
-      'LOG': BEGIN
+      'COMPRESSION': BEGIN
          IF N_Elements(info.param1Obj -> Get_Value()) NE 0 THEN $
             info.mean = info.param1Obj -> Get_Value() ELSE info.mean = 0.5
             info.mean = 0.0 > info.mean < 1.0
@@ -860,7 +876,13 @@ PRO cgSTRETCH_PARAMETERS, event
          info.param2Obj -> Set_Value, info.exponent
       END
 
-      'ASINH': BEGIN
+      'LOG': BEGIN
+          IF N_Elements(info.logObj -> Get_Value()) NE 0 THEN $
+            info.constant = info.logObj -> Get_Value() ELSE info.constant = 1.0
+          info.logObj -> Set_Value, info.constant
+      END
+
+     'ASINH': BEGIN
          theText = Widget_Info(info.asinh_comboID, /Combobox_GetText)
          info.beta = Float(theText)
       END
@@ -927,7 +949,7 @@ PRO cgSTRETCH_FLIPIMAGE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -972,7 +994,7 @@ PRO cgSTRETCH_GAMMA, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1021,7 +1043,7 @@ PRO cgSTRETCH_NEGATIVE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1064,7 +1086,7 @@ PRO cgSTRETCH_OPENIMAGE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1251,7 +1273,7 @@ PRO cgSTRETCH_SAVEAS, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(thisDevice) NE 0 THEN Set_Plot, thisDevice
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
@@ -1283,8 +1305,8 @@ PRO cgSTRETCH_SAVEAS, event
       'PS': BEGIN
 
             WSet, info.windex
-            keys = PSWindow()
-            configureIt = PSConfig(Group_Leader=event.top, Cancel=cancelled, $
+            keys = cgPSWindow()
+            configureIt = cgPS_Config(Group_Leader=event.top, Cancel=cancelled, $
                Color=1, Filename='cgstretch.ps', _Extra=keys)
             IF NOT cancelled THEN BEGIN
                   thisDevice = !D.Name
@@ -1322,7 +1344,7 @@ PRO cgSTRETCH_SAVEHISTOAS, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(thisDevice) NE 0 THEN Set_Plot, thisDevice
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
@@ -1353,8 +1375,8 @@ PRO cgSTRETCH_SAVEHISTOAS, event
       'BMP': dummy = cgSnapshot(Filename=filename, /BMP)
       'PS': BEGIN
 
-            keys = PSWindow()
-            configureIt = PSConfig(Group_Leader=event.top, Cancel=cancelled, $
+            keys = cgPSWindow()
+            configureIt = cgPS_Config(Group_Leader=event.top, Cancel=cancelled, $
                Color=1, Filename='cgstretch_histrogram.ps', _Extra=keys)
             IF NOT cancelled THEN BEGIN
                   thisDevice = !D.Name
@@ -1397,7 +1419,7 @@ PRO cgSTRETCH_SETTHRESHOLD, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1452,7 +1474,7 @@ PRO cgSTRETCH_PRINT, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1480,7 +1502,7 @@ PRO cgSTRETCH_PRINT, event
          ; Have to set up drawing colors *before* we go into the PRINTER device.
          FOR j=0,N_Elements(info.colors)-1 DO color = cgColor(info.colors[j])
       ENDELSE
-      configurePrinter = PSWindow(/Printer)
+      configurePrinter = cgPSWindow(/Printer)
 
       ; Print the image.
       thisDevice = !D.Name
@@ -1524,7 +1546,7 @@ PRO cgSTRETCH_PROCESS_EVENTS, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1633,7 +1655,7 @@ PRO cgSTRETCH_MOVELINE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -1887,7 +1909,7 @@ PRO cgSTRETCH_RESTORE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -2002,7 +2024,7 @@ PRO cgSTRETCH_STRETCHTYPE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -2115,6 +2137,13 @@ PRO cgSTRETCH_STRETCHTYPE, event
          info.currentMappedBase = info.logBaseID
          END
 
+      'COMPRESSION': BEGIN
+             IF Widget_Info(info.currentMappedBase, /Valid_ID) THEN $
+                 Widget_Control, info.currentMappedBase, Map=0
+             Widget_Control, info.compressBaseID, Map=1
+             info.currentMappedBase = info.compressBaseID
+         END
+
       'ASINH': BEGIN
          IF Widget_Info(info.currentMappedBase, /Valid_ID) THEN $
             Widget_Control, info.currentMappedBase, Map=0
@@ -2186,7 +2215,7 @@ PRO cgSTRETCH_COLORS, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -2240,7 +2269,7 @@ PRO cgSTRETCH_MAXVALUE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -2287,7 +2316,7 @@ PRO cgSTRETCH_IMAGE_RESIZE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -2347,7 +2376,7 @@ PRO cgSTRETCH_HISTOGRAM_RESIZE, event
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      void = Error_Message()
+      void = cgErrorMsg()
       IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
       RETURN
    ENDIF
@@ -2436,6 +2465,8 @@ END ;---------------------------------------------------------------------
 ;             colors[5] : Histogram color. Default: "charcoal".
 ;    colortable: in, optional, type=integer, default=0
 ;         The color table to display the image in. By default, gray-scale colors.
+;    constant: in, optional, type=float, default = 1.0
+;         The constant value in a logarithmic stretch. 
 ;    exclude: in, optional, type=numeric
 ;         The value to exclude in a standard deviation stretch.
 ;    exponent: in, optional, type=float, default=4.0
@@ -2499,14 +2530,15 @@ END ;---------------------------------------------------------------------
 ;           Number   Type of Stretch
 ;
 ;             0         Linear         scaled = BytScl(image, MIN=minThresh, MAX=maxThresh)
-;             1         Gamma          scaled = GmaScl(image, MIN=minThresh, MAX=maxThresh, Gamma=gamma)
-;             2         Log            scaled = LogScl(image, MIN=minThresh, MAX=maxThresh, Mean=mean, Exponent=exponent)
-;             3         Asinh          scaled = AsinhScl(image, MIN=minThresh, MAX=maxThresh, Beta=beta)
+;             1         Gamma          scaled = cgGmaScl(image, MIN=minThresh, MAX=maxThresh, Gamma=gamma)
+;             2         Log            scaled = cgLogScl(image, MIN=minThresh, MAX=maxThresh, Constant=constant)
+;             3         Asinh          scaled = cgAsinhScl(image, MIN=minThresh, MAX=maxThresh, Beta=beta)
 ;             4         Linear 2%      A linear stretch, with 2 percent of pixels clipped at both the top and bottom
 ;             5         Square Root    A linear stretch of the square root histogram of the image values.
 ;             6         Equalization   A linear stretch of the histogram equalized image histogram.
 ;             7         Gaussian       A Gaussian normal function is applied to the image histogram.
 ;             8         StdDev         The image is stretched linearly based on its mean and a multiple of its standard deviation.
+;             9         Compression    scaled = cgCompressScl(image, MIN=minThresh, MAX=maxThresh, Mean=mean, Exponent=exponent)
 ;    uvalue: in, optional
 ;         Any IDL variable can be stored in this keyword.
 ;    xpos: in, optional, type=integer, default=100
@@ -2521,6 +2553,7 @@ PRO cgSTRETCH, theImage, $
    Brewer=brewer, $
    Colors=colors, $
    Colortable=ctable, $
+   Constant=constant, $
    Exclude=exclude, $
    Exponent=exponent, $
    Filename=filename, $
@@ -2547,7 +2580,7 @@ PRO cgSTRETCH, theImage, $
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /Cancel
-      ok = Error_Message(/Traceback)
+      ok = cgErrorMsg(/Traceback)
       RETURN
    ENDIF
 
@@ -2619,6 +2652,7 @@ PRO cgSTRETCH, theImage, $
       i = Where(colors EQ "", count)
       IF count GT 0 THEN colors[i] = defcolors[i]
    ENDELSE
+   IF N_Elements(constant) EQ 0 THEN constant = 1.0
    IF N_Elements(ctable) EQ 0 THEN ctable = 0
    IF N_Elements(exponent) EQ 0 THEN exponent = 4.0
    IF N_Elements(extra) EQ 0 THEN extra = Ptr_New(/Allocate_Heap) ELSE extra = Ptr_New(extra)
@@ -2650,7 +2684,7 @@ PRO cgSTRETCH, theImage, $
 
    ; Determine scaling type.
    possibleTypes = ['LINEAR', 'GAMMA', 'LOG', 'ASINH', 'LINEAR 2%', 'SQUARE ROOT', $
-        'EQUALIZATION', 'ADAPTIVE EQUALIZATION', 'GAUSSIAN', 'STDDEV']
+        'EQUALIZATION', 'ADAPTIVE EQUALIZATION', 'GAUSSIAN', 'STDDEV', 'COMPRESSION']
    IF N_Elements(type) EQ 0 THEN type = 'LINEAR'
    IF Size(type, /TName) EQ 'STRING' THEN BEGIN
       type = StrUpCase(type)
@@ -2738,11 +2772,11 @@ PRO cgSTRETCH, theImage, $
    paramBaseID = Widget_Base(histo_tlb, XPAD=0, YPAD=0, Column=1, Base_Align_Left=1)
    rowID = Widget_Base(paramBaseID, XPAD=0, YPAD=0, ROW=1, SPACE=10)
    types = StrUpCase(['Linear', 'Linear 2%', 'Gamma', 'Log', 'Square Root', 'Asinh', $
-        'Equalization', 'Adaptive Equalization', 'Gaussian'])
+        'Equalization', 'Adaptive Equalization', 'Gaussian', 'StdDev', 'Compression'])
    index = Where(types EQ type) ; Necessary for backward compatibility and for my ordering in pull-down.
    scaleID = FSC_Droplist(rowID, Title='Scaling: ', Spaces=1, $
       Value=['Linear', 'Linear 2%', 'Gamma', 'Log', 'Square Root', 'Asinh', $
-        'Equalization', 'Adaptive Equalization','Gaussian', 'StdDev'], $
+        'Equalization', 'Adaptive Equalization','Gaussian', 'StdDev', 'Compression'], $
       Event_Pro='cgStretch_StretchType')
    scaleID -> SetIndex, index[0] > 0
 
@@ -2757,12 +2791,17 @@ PRO cgSTRETCH, theImage, $
    ; Create the control base widgets.
    controlBaseID = Widget_Base(paramBaseID, XPAD=0, YPAD=0)
 
-         ; LOG controls.
-         logBaseID = Widget_Base(controlBaseID, XPAD=0, YPAD=0, ROW=1, SPACE=10, Map=0)
-         param1Obj = FSC_InputField(logBaseID, Title='Mean: ', Value=mean, /Positive, $
+         ; COMPRESSION controls.
+         compressBaseID = Widget_Base(controlBaseID, XPAD=0, YPAD=0, ROW=1, SPACE=10, Map=0)
+         param1Obj = FSC_InputField(compressBaseID, Title='Mean: ', Value=mean, /Positive, $
             /FoatValue, Event_Pro='cgStretch_Parameters', /CR_Only, XSize=10)
-         param2Obj = FSC_InputField(logBaseID, Title='Exponent: ', Value=exponent, /Positive, $
+         param2Obj = FSC_InputField(compressBaseID, Title='Exponent: ', Value=exponent, /Positive, $
             /FloatValue, Event_Pro='cgStretch_Parameters', /CR_Only, XSize=10)
+
+        ; LOG controls.
+        logBaseID = Widget_Base(controlBaseID, XPAD=0, YPAD=0, ROW=1, SPACE=10, Map=0)
+        logObj = FSC_InputField(logBaseID, Title='Constant: ', Value=constant, $
+            /FoatValue, Event_Pro='cgStretch_Parameters', /CR_Only, XSize=10)
 
          ; GAMMA controls.
          gammaBaseID = Widget_Base(controlBaseID, XPAD=0, YPAD=0, ROW=1, SPACE=10, Map=0)
@@ -2798,6 +2837,10 @@ PRO cgSTRETCH, theImage, $
 
    ; Realize the proper controls.
    CASE type OF
+       'COMPRESSION': BEGIN
+           Widget_Control, compressBaseID, Map=1
+           currentMappedBase = compressBaseID
+       END
       'LOG': BEGIN
          Widget_Control, logBaseID, Map=1
          currentMappedBase = logBaseID
@@ -2944,15 +2987,18 @@ PRO cgSTRETCH, theImage, $
            gamma: gamma, $                  ; The gamma value.
            beta: beta, $                    ; The "softenting parameter" for ASINH scaling.
            logBaseID: logBaseID, $          ; The base widget ID of the LOG parameters.
+           compressBaseID: compressBaseID, $; The base widget ID of the COMPRESSION parameters.
            gammaBaseID: gammaBaseID, $      ; The base widget ID of the GAMMA parameters.
            asinhBaseID: asinhBaseID, $      ; The base widget ID of the ASINH parameters.
            gaussBaseID: gaussBaseID, $      ; The base widget ID of the GAUSSIAN parameters.
            stddevBaseID: stddevBaseID, $    ; The base widget ID of the STDEV parameters.
            currentMappedBase: currentMappedBase, $ The current base mapped into the control base.
+           constant: constant, $            ; The constant value in the LOG stretch.
            exponent: exponent, $            ; The exponent value.
            mean: mean, $                    ; The mean value.
            param1Obj: param1Obj, $          ; The first parameter widget.
            param2Obj: param2Obj, $          ; The second parameter widget.
+           logObj: logObj, $                ; The constant object for the LOG stretch.
            gamma_comboID: gamma_comboID, $  ; The gamma control combobox widget ID.
            asinh_comboID: asinh_comboID, $  ; The asinh control combobox widget ID.
            pbase_ysize: pbase_ysize, $      ; The y size of the parameter base.

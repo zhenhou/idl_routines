@@ -90,9 +90,12 @@
 ;        Added TRANSFORM keyword to allow the initial surface to be rotated to user 
 ;            specifications. 26 Sept 2011. DWF.
 ;        Changed FSC_Normalize to cgNormalize to reflect new name. 6 Feb 2013. DWF.
+;        Axes titles are now changing size with the CHARSIZE keyword, as they are supposed to. 4 Nov 2013. DWF.
+;        Fixed a problem with the Light Controller when trying to set a color. 21 Mar 2014. DWF.
+;        Added checks to make sure the surface ranges are not zero. 8 March 2014. DWF.
 ;
 ; :Copyright:
-;     Copyright (c) 2010-2011, Fanning Software Consulting, Inc.
+;     Copyright (c) 2010-2014, Fanning Software Consulting, Inc.
 ;-
 
 ;+
@@ -106,11 +109,13 @@ PRO CW_Light_Control_Intensity_Events, event
 
     ; Handles selection events from the Intensity Value widget.
     
+    Compile_Opt idl2
+    
     ; Error handling.
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, infoCarrier, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -156,11 +161,13 @@ END ;---------------------------------------------------------------------------
 ;-
 PRO CW_Light_Control_Events, event
 
+    Compile_Opt idl2
+
     ; Error handling.
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, infoCarrier, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -176,8 +183,8 @@ PRO CW_Light_Control_Events, event
           TVLCT, info.color, info.index
           DEVICE, Decomposed=0, Get_Decomposed=theDecomposedState
           setcolor_title = Widget_Info(event.id, /UNAME)
-          thisColor = PickColor(CURRENTCOLOR=info.color, Group_Leader=event.top, Title=setcolor_title)
-          thisColor = Reform(thisColor, 3, 1)
+          thisColor = cgPickColorName( Group_Leader=event.top, Title=setcolor_title)
+          thisColor = Reform(cgColor(thisColor, /Triple), 3)
           info.theLight->SetProperty, Color=thisColor
           DEVICE, Decomposed=theDecomposedState
           info.color = thisColor
@@ -276,6 +283,8 @@ FUNCTION CW_Light_Control, parent, theLight, $
   SetColor_Name=setColor_name, $
   UValue=uvalue
 
+  Compile_Opt idl2
+  
 ; This is a compound widget that allows one to manipulate various
 ; properties of light objects.
 
@@ -352,6 +361,9 @@ END ;--------------------------------------------------------------------
 ;       The event structure from the graphical user interface of the program.
 ;-
 PRO cgSurface_Light_Controls_Event, event
+
+    Compile_Opt idl2
+
     Widget_Control, event.top, Get_UValue=info
     info.theWindow->Draw, info.theView
 END
@@ -368,6 +380,8 @@ END
 ;       The event structure from the graphical user interface of the program.
 ;-
 PRO cgSurface_Light_Controls, event
+
+    Compile_Opt idl2
 
     ; Place the light control beside the current widget program.
     Widget_Control, event.top, Get_UValue=info, /No_Copy
@@ -420,7 +434,7 @@ PRO cgSurface_Axes_OnOff, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -467,7 +481,7 @@ PRO cgSurface_Bottom_OnOff, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -506,7 +520,7 @@ PRO cgSurface_Change_Colors, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -574,7 +588,7 @@ PRO cgSurface_Draw_Events, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -700,7 +714,7 @@ PRO cgSurface_Elevation_Colors, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -757,7 +771,7 @@ PRO cgSurface_Elevation_Shading, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -823,7 +837,7 @@ PRO cgSurface_Move_Surface, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -872,7 +886,7 @@ PRO cgSurface_Move_Title, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -1003,7 +1017,7 @@ PRO cgSurface_Properties, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -1101,7 +1115,7 @@ PRO cgSurface_Skirt_OnOff, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -1139,7 +1153,7 @@ PRO cgSurface_Style, event
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(info) NE 0 THEN Widget_Control, event.top, Set_UValue=info, /No_Copy
     ENDIF
 
@@ -1324,6 +1338,9 @@ END ;---------------------------------------------------------------------------
 ;         Set this keyword to the identifier of a widget that will serve as the
 ;         group leader for this widget program. When the group leader dies, this
 ;         program will die, too.
+;     palette: in, optional, type=byte
+;        A 3x256 byte array (or 256x3) representing the colors for elevation shading. An alternative
+;        way of specifying the color table, instead of using the `CTable` keyword.
 ;     reverse: in, optional, type=boolean, default=0
 ;        Set this keyword to reverse the color table set by CTABLE.
 ;     shaded: in, optional, type=boolean, default=0
@@ -1354,6 +1371,12 @@ END ;---------------------------------------------------------------------------
 ;     transform: in, optional, type=4x4 double array
 ;         A homogeneous transformation matrix to be applied to the initial surface. Such a 
 ;         transformation matrix can be obtained, for example, with the T3D procedure.
+;     vert_colors: in, optional, type=byte
+;         A vector of colors to be used to specify the color of a surface vertex. The vector
+;         may be of the form [n] where each entry is a color index, or of the form [3,n] where
+;         each 3-element row is an RGB color, or of the form [4,n] where each 4-element row
+;         is an RGBA color. To remove vertex colors after they have been set, set VERT_COLORS
+;         to a scalar. See the documentation for IDLgrSurface for additional details.
 ;     xoffset: in, optional, type=integer, default=50
 ;         The number of pixels the surface window should be offset in the X direction
 ;         from the upper-left corner of the display.
@@ -1401,6 +1424,7 @@ PRO cgSurface, data, x, y, $
     Font=font, $
     Hidden_Lines=hidden_lines, $
     Group_Leader=groupLeader, $
+    Palette=palette, $
     Reverse=reverse, $
     Shaded=shaded, $
     Skirt=skirt, $
@@ -1410,6 +1434,7 @@ PRO cgSurface, data, x, y, $
     TCharsize=tcharsize, $
     TColor=tcolorName, $
     Transform=transform, $
+    Vert_Colors=vert_colors, $
     XOffset=xoffset, $
     XRange=xrange_u, $
     XSize=xsize, $
@@ -1432,7 +1457,7 @@ PRO cgSurface, data, x, y, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         RETURN
     ENDIF
   
@@ -1447,7 +1472,7 @@ PRO cgSurface, data, x, y, $
         Message, 'This program only works on devices that support windows.'
         
     ; We are going to do this in decomposed color mode.
-    SetDecomposedState, 1, CurrentState=currentDecomposedState
+    cgSetColorState, 1, CurrentState=currentDecomposedState
       
     ; Check parameters.
     IF N_Elements(data) EQ 0 THEN BEGIN
@@ -1471,12 +1496,18 @@ PRO cgSurface, data, x, y, $
     IF N_Elements(tcolorName) EQ 0 THEN tcolorName = axisColorName 
     IF N_Elements(colorName) EQ 0 THEN colorName = 'blu6' 
     IF N_Elements(bottomName) EQ 0 THEN bottomName = 'dark gray' 
-    IF N_Elements(colortable) EQ 0 THEN BEGIN
-        colors = Transpose([[rr],[gg], [bb]])
-        colortable = -1
+    IF N_Elements(palette) EQ 0 THEN BEGIN
+        IF N_Elements(colortable) EQ 0 THEN BEGIN
+            colors = Transpose([[rr],[gg], [bb]])
+            colortable = -1
+        ENDIF ELSE BEGIN
+            cgLoadCT, colortable, Reverse=Keyword_Set(reverse), Brewer=Keyword_Set(brewer), $
+                RGB_TABLE=colors, /ROW
+        ENDELSE
     ENDIF ELSE BEGIN
-        cgLoadCT, colortable, Reverse=Keyword_Set(reverse), Brewer=Keyword_Set(brewer), $
-            RGB_TABLE=colors, /ROW
+        spal = Size(palette, /Dimensions)
+        IF spal[0] NE 3 THEN colors = Transpose(palette) ELSE colors = palette
+        colortable = -1
     ENDELSE
     
     ; Create a color palette for use later.
@@ -1613,15 +1644,15 @@ PRO cgSurface, data, x, y, $
     textModel = Obj_New('IDLgrModel')
     thisView->Add, textModel
     
-    ; Create helper objects. First, create title objects
-    ; for the axes and plot. Color them green.
-    xTitle = Obj_New('IDLgrText', xtitleText, Color=axisColor, /Enable_Formatting)
-    yTitle = Obj_New('IDLgrText', ytitleText, Color=axisColor, /Enable_Formatting)
-    zTitle = Obj_New('IDLgrText', ztitleText, Color=axisColor, /Enable_Formatting)
-    
     ; Create font objects.
     axisFont  = Obj_New('IDLgrFont', font, Size=12*charsize)
     titleFont = Obj_New('IDLgrFont', font, Size=12*tcharsize)
+    
+    ; Create helper objects. First, create title objects
+    ; for the axes and plot. Color them green.
+    xTitle = Obj_New('IDLgrText', xtitleText, Color=axisColor, /Enable_Formatting, Font=axisFont)
+    yTitle = Obj_New('IDLgrText', ytitleText, Color=axisColor, /Enable_Formatting, Font=axisFont)
+    zTitle = Obj_New('IDLgrText', ztitleText, Color=axisColor, /Enable_Formatting, Font=axisFont)
     
     ; Create a plot title object. I am going to place the title
     ; centered in X and towards the top of the viewplane rectangle.
@@ -1637,12 +1668,12 @@ PRO cgSurface, data, x, y, $
     IF elevation_shading THEN BEGIN
         thisSurface = OBJ_NEW('IDLgrSurface', data, x, y, $
            Color=color, _Strict_Extra=extra, Style=style, $
-           Shading=shading, Hidden_Lines=hidden_lines)
+           Shading=shading, Hidden_Lines=hidden_lines, Vert_Colors=vert_colors)
     ENDIF ELSE BEGIN
         thisSurface = OBJ_NEW('IDLgrSurface', data, x, y, $
            Color=color, _Strict_Extra=extra, Style=style, $
            Shading=shading, Hidden_Lines=hidden_lines, BOTTOM=bottom, $
-           SPECULAR=specularColor)    
+           SPECULAR=specularColor, Vert_Colors=vert_colors)    
     ENDELSE
     
     ; Do you have a texture image?
@@ -1661,6 +1692,11 @@ PRO cgSurface, data, x, y, $
     IF N_Elements(xrange_u) NE 0 THEN xrange = xrange_u
     IF N_Elements(yrange_u) NE 0 THEN yrange = yrange_u
     IF N_Elements(zrange_u) NE 0 THEN zrange = zrange_u
+    
+    ; Make sure the ranges are not zero.
+    IF Abs(xrange[1] - xrange[0]) LT 1e-12 THEN xrange = [xrange[1]+0.1*xrange[1], xrange[1]-0.1*xrange[1]]
+    IF Abs(yrange[1] - yrange[0]) LT 1e-12 THEN yrange = [yrange[1]+0.1*yrange[1], yrange[1]-0.1*yrange[1]]
+    IF Abs(zrange[1] - zrange[0]) LT 1e-12 THEN zrange = [zrange[1]+0.1*zrange[1], zrange[1]-0.1*zrange[1]]
     
     ; Create axes objects for the surface. Axes are created after the surface 
     ; so the range can be set correctly. Note how I set the font.
@@ -1689,7 +1725,7 @@ PRO cgSurface, data, x, y, $
     ; If you want elevation shading, have to set the colors up now.
     IF elevation_shading THEN BEGIN
        s = Size(data, /Dimensions)
-       thisSurface->SetProperty, Vert_Colors=Reform(BytScl(data, /NAN, Min=Min(zrange), Max=Max(zrange)), $
+       thisSurface->SetProperty, Vert_Colors=Reform(BytScl(data, /NAN, Min=Min(data), Max=Max(data)), $
           s[0]*s[1]), Palette=colorPalette
     ENDIF
     

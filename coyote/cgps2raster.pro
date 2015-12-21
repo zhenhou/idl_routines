@@ -7,6 +7,7 @@
 ;    The purpose of this program is to convert a PostScript file to a high
 ;    resolution raster file, using the ImageMagick convert command to do the
 ;    conversion.
+;    
 ;******************************************************************************************;
 ;                                                                                          ;
 ;  Copyright (c) 2011, by Fanning Software Consulting, Inc. All rights reserved.           ;
@@ -84,6 +85,16 @@
 ;        keyword will be set.
 ;     gif: in, optional, type=boolean, default=0                 
 ;        Set this keyword to convert the PostScript output file to a GIF image. Requires ImageMagick.
+;     height: in, optional, type=integer
+;        Set this keyword to set the height of the resulting raster file in pixel units. The width of the
+;        raster will be such as to preserve the aspect ratio of the starting image. This keyword
+;        cannot be used if the `WIDTH` keyword is used at the same time.
+;     im_command: out, optional, type=string
+;        Set this keyword to a named variable to return the ImageMagick command or commands used to 
+;        produce the desired output. If this keyword is used, the ImageMagick commands are NOT executed,
+;        but are simply constructed and returned to the user. If a resize is required by using either the
+;        `HEIGH`T or `WIDTH` keywords, then the return value is a two-element string array. Otherwise, it
+;        is a scalar string.
 ;     im_options: in, optional, type=string, default=""
 ;        A string of ImageMagick "convert" options that can be passed to the ImageMagick convert 
 ;        command. No error checking occurs with this string.
@@ -100,7 +111,8 @@
 ;        mode is assumed.    
 ;     resize: in, optional, type=integer, default=25
 ;        If an image is being created from the PostScript file, it is often resized by some 
-;        amount. You can use this keyword to change the value (e.g, RESIZE=100).
+;        amount. You can use this keyword to change the value (e.g, RESIZE=80). Set this keyword
+;        to 0 to avoid any resizing of the output raster file.
 ;        The value is passed on to resize argument as a percentage in the ImageMagick call.
 ;     showcmd: in, optional, type=boolean, default=0
 ;        Set this command to show the command used to do any PostScript coversions.
@@ -114,18 +126,19 @@
 ;        Set this keyword to convert the PostScript output file to a TIFF image. Requires ImageMagick.
 ;     width: in, optional, type=integer
 ;        Set this keyword to set the resulting width of the raster file. The height of the
-;        raster will be such as to preserve the aspect ratio of the starting image.
+;        raster will be such as to preserve the aspect ratio of the starting image. This keyword
+;        cannot be used if the `HEIGHT` keyword is used at the same time.
 ;          
 ; :Examples:
 ;    To create a line plot in a PostScript file named lineplot.ps and
 ;    also create a PNG file named lineplot.png for display in a browser,
 ;    type these commands::
 ;
-;        PS_Start, FILENAME='lineplot.ps'
+;        cgPS_Open, FILENAME='lineplot.ps'
 ;        cgPlot, Findgen(11), COLOR='navy', /NODATA, XTITLE='Time', YTITLE='Signal'
 ;        cgPlot, Findgen(11), COLOR='indian red', /OVERPLOT
 ;        cgPlot, Findgen(11), COLOR='olive', PSYM=2, /OVERPLOT
-;        PS_End, /PNG
+;        cgPS_Close, /PNG
 ;       
 ; :Author:
 ;       FANNING SOFTWARE CONSULTING::
@@ -146,18 +159,31 @@
 ;       Apparently Macs can't handle the version number, so I have removed the version number
 ;           check for Macs. 13 October 2012. DWF.
 ;       Worked on getting the WIDTH keyword to work correctly with Portrait mode files. 19 February 2013. DWF.
-;
+;       Added the ability to set the number of bits per channel with TIFF files with the IM_TIFF_DEPTH 
+;           keyword in cgWindow_SetDefs, and changed the default number of bits to 8 per channel
+;           from the previous 16. 14 May 2013. DWF.
+;       I changed the way raster files are resized because the results were inconsistent in the previous version.
+;           I now use a second "convert" command to resize the raster file that has previously been produced. 14 Jan 2014. DWF.
+;       Added HEIGHT keyword to allow the height of the raster file to be set. 14 Jan 2014. DWF.
+;       Added IM_COMMAND keyword to return the ImageMagick command or commands used to produce the raster file. 14 Jan 2014. DWF.
+;       New resize algorithm was noticably slower. Went back to a single ImageMagick command, but done correctly now. 15 Jan 2014. DWF.
+;       Problem with WIDTH and HEIGHT keywords being reversed. Had to do with putting this calculation before ROTATE in
+;           ImageMagick command. Now placed in the correct order, I think. 20 Feb 2014. DWF.
+;       Width can be set to zero in some instances. Now handling that case to undefine WIDTH. 1 March 2014. DWF.
+;           
 ; :Copyright:
-;     Copyright (c) 2011, Fanning Software Consulting, Inc.
+;     Copyright (c) 2011-2014, Fanning Software Consulting, Inc.
 ;-
 PRO cgPS2Raster, ps_filename, raster_filename, $
     ALLOW_TRANSPARENT=allow_transparent, $
     BMP=bmp, $
     DELETE_PS=delete_ps, $
     DENSITY=density, $
+    IM_COMMAND=im_command, $
     IM_OPTIONS=im_options, $
     FILETYPE=filetype, $
     GIF=gif, $
+    HEIGHT=height, $
     JPEG=jpeg, $
     OUTFILENAME=outfilename, $
     PDF=pdf, $
@@ -176,7 +202,7 @@ PRO cgPS2Raster, ps_filename, raster_filename, $
    Catch, theError
    IF theError NE 0 THEN BEGIN
       Catch, /CANCEL
-      IF ~Keyword_Set(silent) THEN void = Error_Message()
+      IF ~Keyword_Set(silent) THEN void = cgErrorMsg()
       success = 0
       RETURN
    ENDIF
@@ -222,14 +248,19 @@ PRO cgPS2Raster, ps_filename, raster_filename, $
    SetDefaultValue, resize, 25
    SetDefaultValue, showcmd, 0, /BOOLEAN
    SetDefaultValue, silent, 0, /BOOLEAN
-   SetDefaultValue, width, 0
-   IF portrait THEN BEGIN
-      xsize = 11
-      ysize = 8.5
-   ENDIF ELSE BEGIN
-      xsize = 8.5
-      ysize = 11
-   ENDELSE
+   SetDefaultValue, spawnCmd, 1, /BOOLEAN
+   IF (N_Elements(width) NE 0) && (width EQ 0) THEN Undefine, width ; Solve a problem with 0 default value.
+   IF (N_Elements(width) NE 0) || (N_Elements(height) NE 0) THEN resize = 0 ; No resize if using a specific width or height.
+   IF Arg_Present(im_command) THEN BEGIN
+           spawnCmd = 0
+           im_command = ""
+   ENDIF
+   
+   ; Can't specify both height and width at the same time.
+   IF (N_Elements(width) NE 0) && (N_Elements(height) NE 0) THEN BEGIN
+       Message, 'HEIGHT and WIDTH keywords cannot be used together. Using WIDTH.', /Informational
+       Undefine, height
+   ENDIF 
    
    ; Construct an output filename, if needed. First, look to see if the raster_filename
    ; positional parameter is being used to specify the output filename.
@@ -284,23 +315,7 @@ PRO cgPS2Raster, ps_filename, raster_filename, $
           IF allowAlphaCmd THEN alpha_cmd =  allow_transparent ? '' : ' -alpha off' 
           density_cmd = ' -density ' + StrTrim(density,2)
           
-          ; Normally, we just resize by a precentage, unless a specific width
-          ; has been specified.
-          IF (N_Elements(width) EQ 0) || (width LE 0) THEN BEGIN
-               resize_cmd =  ' -resize '+ StrCompress(resize, /REMOVE_ALL)+'%'
-          ENDIF ELSE BEGIN
-                
-          ; Getting the width correct has to be done in an extremely non-intuitive way.
-          ; I wonder if this will be changed in different versions of ImageMagick?
-          IF portrait THEN BEGIN
-               height = Ceil(Float(xsize)*width/ysize)
-               resize_cmd = ' -resize ' + StrCompress(width, /REMOVE_ALL) + 'x' + StrCompress(height, /REMOVE_ALL)
-          ENDIF ELSE BEGIN
-               height = Ceil(width*ysize/Float(xsize))
-               resize_cmd = ' -resize ' + StrCompress(height, /REMOVE_ALL) + 'x' + StrCompress(width, /REMOVE_ALL)
-          ENDELSE
-          ENDELSE
- 
+          
            ; Start ImageMagick convert command.
           cmd = 'convert'
                 
@@ -311,37 +326,87 @@ PRO cgPS2Raster, ps_filename, raster_filename, $
           ; Add the input filename.
           cmd = cmd +  ' "' + ps_filename + '"' 
                 
-          IF N_Elements(resize_cmd) NE 0 THEN cmd = cmd + resize_cmd
+          ; We want to flatten the output.
           cmd = cmd +  ' -flatten '
+          
+          ; Any ImageMagick options from the user?
           IF N_Elements(im_options) NE 0 THEN BEGIN
               IF StrMid(im_options, 0, 1) NE " " THEN im_options = " " + im_options
               cmd = cmd + im_options
+          ENDIF
+          
+          ; For TIFF files, we are setting the number of bits per channel.
+          ; The values 8, 16, and 32 are allowed.
+          IF Keyword_Set(tiff) THEN BEGIN
+              cgWindow_GetDefs, IM_TIFF_DEPTH=im_tiff_depth
+              choices = [8,16,32]
+              void = Where(choices EQ im_tiff_depth, count)
+              IF count NE 1 THEN BEGIN
+                  Message, 'Unable to create TIFF file with ' + $
+                       StrTrim(im_tiff_depth,2) + ' bits per channel. Using 8.', /Informational
+                  im_tiff_depth = 8
+              ENDIF
+              cmd = cmd + ' -depth ' + StrTrim(im_tiff_depth,2) + ' '
           ENDIF
                 
           ; If in landscape mode, rotate by 90 to allow the 
           ; resulting file to be in landscape mode.
           IF (1-portrait) THEN cmd = cmd + ' -rotate 90'
                 
-                ; Add the output filename and check for PNG output.
-                IF Keyword_Set(png) THEN BEGIN
+          ; Need to resize to a specific width or height? This MUST be located AFTER the -ROTATE command!
+          IF (N_Elements(width) NE 0) || (N_Elements(height) NE 0) THEN BEGIN
+              CASE 1 OF
+                  (N_Elements(width) NE 0) && (N_Elements(height) EQ 0): BEGIN
+                      resize_cmd = ' -resize ' + StrCompress(Fix(width), /REMOVE_ALL)
+                  END
+                  (N_Elements(width) EQ 0) && (N_Elements(height) NE 0): BEGIN
+                      IF (1-portrait) THEN BEGIN
+                          dims = Reverse(cgPSDims(ps_filename))
+                          width = Round(dims[0]*Float(height)/dims[1])
+                          resize_cmd = ' -resize ' + StrCompress(width, /REMOVE_ALL)
+                      ENDIF ELSE BEGIN
+                           dims = cgPSDims(ps_filename)
+                           width = Round(dims[0]*Float(height)/dims[1])
+                           resize_cmd = ' -resize ' + StrCompress(width, /REMOVE_ALL)
+                      ENDELSE
+                  END
+              ENDCASE
+          ENDIF
+          
+          ; We will do the normal resize, unless this has already been done. Two checks here.
+          IF (resize NE 0) && (N_Elements(resize_cmd) EQ 0) THEN BEGIN
+              resize_cmd =  ' -resize '+ StrCompress(resize, /REMOVE_ALL) + '%'
+          ENDIF
+          
+          ; If we are resizing the output.
+          IF N_Elements(resize_cmd) NE 0 THEN cmd = cmd + resize_cmd
+          
+          ; Add the output filename and check for PNG output.
+          IF Keyword_Set(png) THEN BEGIN
                 
-                    ; Check to see whether 8-bit or 24-bit PNG files should be created.
-                    cgWindow_GetDefs, IM_PNG8=png8
-                    IF png8 THEN BEGIN
-                       cmd = cmd + ' "' + 'PNG8:' +outfilename + '"' 
-                    ENDIF ELSE BEGIN
-                       cmd = cmd + ' "' + 'PNG24:' +outfilename + '"' 
-                    ENDELSE
-                ENDIF ELSE cmd = cmd + ' "' + outfilename + '"'
+              ; Check to see whether 8-bit or 24-bit PNG files should be created.
+              cgWindow_GetDefs, IM_PNG8=png8
+               IF png8 THEN BEGIN
+                  cmd = cmd + ' "' + 'PNG8:' +outfilename + '"' 
+               ENDIF ELSE BEGIN
+                  cmd = cmd + ' "' + 'PNG24:' +outfilename + '"' 
+               ENDELSE
+         ENDIF ELSE cmd = cmd + ' "' + outfilename + '"'
+                
           IF ~silent THEN BEGIN
               IF showcmd THEN Print, 'ImageMagick CONVERT command: ',  cmd
           ENDIF
-          SPAWN, cmd, result, err_result
+          
+          ; Execute the spawned command unless you are saving it.
+          IF spawnCmd THEN SPAWN, cmd, result, err_result ELSE im_command = cmd
                 
+
           IF ~silent THEN BEGIN
               IF err_result[0] NE "" THEN BEGIN
                   FOR k=0,N_Elements(err_result)-1 DO Print, err_result[k]
-              ENDIF ELSE Print, 'Output file located here: ' + outfilename
+              ENDIF ELSE BEGIN
+                Print, 'Output file located here: ' + outfilename
+              ENDELSE
           ENDIF
                 
           ; Have you been asked to delete the PostScript file?

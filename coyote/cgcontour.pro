@@ -108,6 +108,10 @@
 ;        The type of font desired for axis annotation.
 ;     fill: in, optional, type=boolean, default=0
 ;        Set to indicate filled contours should be created.
+;     isotropic: in, optional, type=boolean, default=0
+;         Set this keyword to set the `Aspect` keyword to the plot aspect ratio that preserves
+;         identical scaling for the X and Y axes. This keyword cannot be used with multiple
+;         contour plots on the page.
 ;     irregular: in, optional, type=boolean
 ;        If this keyword is set, the data, x, and y input parameters are taken to be
 ;        irregularly gridded data, the the data is gridded for use in the contour plot
@@ -185,7 +189,7 @@
 ;            
 ;        All raster file output is created through PostScript intermediate files (the
 ;        PostScript files will be deleted), so ImageMagick and Ghostview MUST be installed 
-;        to produce anything other than PostScript output. (See cgPS2PDF and PS_END for 
+;        to produce anything other than PostScript output. (See cgPS2PDF and cgPS_Close for 
 ;        details.) And also note that you should NOT use this keyword when doing multiple 
 ;        plots. The keyword is to be used as a convenient way to get PostScript or raster 
 ;        output for a single graphics command. Output parameters can be set with cgWindow_SetDefs.
@@ -279,7 +283,7 @@
 ;        Restored the CELL_FILL keyword, which had been accidentally removed in
 ;           the earlier version. 12 November 2010. DWF.
 ;        Add the ability to specify the contour colors as color names. 16 November 2010. DWF.
-;        Now setting decomposition state by calling SetDecomposedState. 16 November 2010. DWF.
+;        Now setting decomposition state by calling cgSetColorState. 16 November 2010. DWF.
 ;        Final color table restoration skipped in Z-graphics buffer. 17 November 2010. DWF.
 ;        Background keyword now applies in PostScript file as well. 17 November 2010. DWF.
 ;        Many changes after BACKGROUND changes to get !P.MULTI working again! 18 November 2010. DWF.
@@ -353,9 +357,20 @@
 ;        Modified the way default colors are selected when the background color is "white". 4 Dec 2012. DWF.
 ;        Making more effort to set the CELL_FILL keyword instead of FILL if filling contours on maps. 7 Jan 2013. DWF.
 ;        Added C_ORIENTATION and C_SPACING keywords and modified the program to allow line filling. 28 Jan 2013. DWF.
-;        
+;        Added ISOTROPIC keyword. 27 June 2013. DWF.
+;        Added sanity check for ISOTROPIC keyword. 6 Feb 2014. DWF.
+;        Fixed a bug with the ISOTROPIC keyword. 23 Feb 2014. DWF.
+;        Previously, I used the Aspect function to calculate a position of the plot in the window. This was causing
+;           problems when encapsulated PostScript files were created, because Aspect uses a landscape aspect ratio and EPS
+;           files can only be written in Portrait mode. I also modified the default position to be [0.15, 0.15, 0.915, 0.915],
+;           but I am doing this ONLY for graphics windows, not in PostScript output. This should accommodate a wider range
+;           of contour plot output. If you find axes cut off, use the POSITION keyword to position the plot correctly. 19 March 2014. DWF
+;        Previous fix caused other problems. Reverted to 23 Feb 2014 version of cgContour and have tried another way
+;           to solve encapsulated ASPECT problem. Now setting initial position in window with cgAspect. Appears to be
+;           working correctly. 25 Nov 2014. DWF.
+;           
 ; :Copyright:
-;     Copyright (c) 2010-2013, Fanning Software Consulting, Inc.
+;     Copyright (c) 2010-2014, Fanning Software Consulting, Inc.
 ;-
 PRO cgContour, data, x, y, $
     ADDCMD=addcmd, $
@@ -374,6 +389,7 @@ PRO cgContour, data, x, y, $
     COLOR=scolor, $
     FILL=fill, $
     FONT=font, $
+    ISOTROPIC=isotropic, $
     IRREGULAR=irregular, $
     LABEL=label, $
     LAYOUT=layout, $
@@ -417,10 +433,10 @@ PRO cgContour, data, x, y, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
+        void = cgErrorMsg()
         IF N_Elements(thisMulti) NE 0 THEN !P.Multi = thisMulti
         IF (!D.Name NE "NULL") && (N_Elements(rr) NE 0) THEN TVLCT, rr, gg, bb
-        IF N_Elements(currentState) NE 0 THEN SetDecomposedState, currentState
+        IF N_Elements(currentState) NE 0 THEN cgSetColorState, currentState
         RETURN
     ENDIF
     
@@ -428,7 +444,7 @@ PRO cgContour, data, x, y, $
     IF N_Elements(data) EQ 0 THEN BEGIN
         Print, 'USE SYNTAX: cgContour, data, x, y, NLEVELS=10'
         RETURN
-    ENDIF
+    ENDIF 
     
     ; Set up PostScript device for working with colors.
     IF !D.Name EQ 'PS' THEN Device, COLOR=1, BITS_PER_PIXEL=8
@@ -463,6 +479,7 @@ PRO cgContour, data, x, y, $
                 COLOR=scolor, $
                 FONT=font, $
                 FILL=fill, $
+                ISOTROPIC=isotropic, $
                 IRREGULAR=irregular, $
                 LABEL=label, $
                 LAYOUT=layout, $
@@ -519,6 +536,7 @@ PRO cgContour, data, x, y, $
             COLOR=scolor, $
             FONT=font, $
             FILL=fill, $
+            ISOTROPIC=isotropic, $
             IRREGULAR=irregular, $
             LABEL=label, $
             LAYOUT=layout, $
@@ -655,7 +673,7 @@ PRO cgContour, data, x, y, $
          PS_TT_Font = ps_tt_font               ; Select the true-type font to use for PostScript output.   
        
        ; Set up the PostScript device.
-       PS_Start, $
+       cgPS_Open, $
           CHARSIZE=ps_charsize, $
           DECOMPOSED=ps_decomposed, $
           FILENAME=ps_filename, $
@@ -672,12 +690,94 @@ PRO cgContour, data, x, y, $
     IF N_Elements(c_annotation) NE 0 THEN BEGIN
         FOR j=0,N_Elements(c_annotation)-1 DO c_annotation[j] = cgCheckForSymbols(c_annotation[j])
     ENDIF
+    
+    ; Handle data properly.
+    ndims = Size(data, /N_DIMENSIONS)
+    s = Size(data, /DIMENSIONS)
+    CASE ndims OF
+        1: BEGIN
+            IF N_Elements(x) EQ 0 THEN BEGIN
+                IF Keyword_Set(onImage) THEN BEGIN
+                    CASE !X.TYPE OF
+                        0: xgrid = cgScaleVector(Indgen(s[0]), !X.CRange[0], !X.CRange[1])
+                        1: xgrid = cgScaleVector(Indgen(s[0]), 10^!X.CRange[0], 10^!X.CRange[1])
+                        3: Message, 'Must supply LONGITUDE vector when overplotting on map projections'
+                    ENDCASE
+                ENDIF ELSE BEGIN
+                    xgrid = Indgen(s[0])
+                ENDELSE
+            ENDIF ELSE xgrid = x
+            IF N_Elements(y) EQ 0 THEN BEGIN
+                IF Keyword_Set(onImage) THEN BEGIN
+                    CASE !Y.TYPE OF
+                        0: ygrid = cgScaleVector(Indgen(s[1]), !Y.CRange[0], !Y.CRange[1])
+                        1: ygrid = cgScaleVector(Indgen(s[1]), 10^!Y.CRange[0], 10^!Y.CRange[1])
+                        3: Message, 'Must supply LATITUDE vector when overplotting on map projections'
+                    ENDCASE
+                ENDIF ELSE BEGIN
+                    ygrid = Indgen(s[1])
+                ENDELSE
+            ENDIF ELSE ygrid = y
+        END
+        2: BEGIN
+            IF N_Elements(x) EQ 0 THEN BEGIN
+                IF Keyword_Set(onImage) THEN BEGIN
+                    CASE !X.TYPE OF
+                        0: xgrid = cgScaleVector(Indgen(s[0]), !X.CRange[0], !X.CRange[1])
+                        1: xgrid = cgScaleVector(Indgen(s[0]), 10^!X.CRange[0], 10^!X.CRange[1])
+                        3: Message, 'Must supply LONGITUDE vector when overplotting on map projections'
+                    ENDCASE
+                ENDIF ELSE BEGIN
+                    xgrid = Indgen(s[0])
+                ENDELSE
+            ENDIF ELSE xgrid = x
+            IF N_Elements(y) EQ 0 THEN BEGIN
+                IF Keyword_Set(onImage) THEN BEGIN
+                    CASE !Y.TYPE OF
+                        0: ygrid = cgScaleVector(Indgen(s[1]), !Y.CRange[0], !Y.CRange[1])
+                        1: ygrid = cgScaleVector(Indgen(s[1]), 10^!Y.CRange[0], 10^!Y.CRange[1])
+                        3: Message, 'Must supply LATITUDE vector when overplotting on map projections'
+                    ENDCASE
+                ENDIF ELSE BEGIN
+                    ygrid = Indgen(s[1])
+                ENDELSE
+            ENDIF ELSE ygrid = y
+        END
+        ELSE: Message, 'Contour data must be 1D or 2D.'
+    ENDCASE
+
+    ; Is the ISOTROPIC keyword set?
+    IF Keyword_Set(isotropic) THEN BEGIN
+        yscaleTest = Max(ygrid, /NaN) - Min(ygrid, /NaN)
+        xscaleTest = Max(xgrid, /NaN) - Min(xgrid, /NaN)
+        aspect = Float(yscaleTest)/xscaleTest
+        
+        ; Do a sanity check.
+        IF (aspect LT 1e-2) || (aspect GT 100) THEN $
+            Message, 'Axes ranges are incompatible with the ISOTROPIC keyword. Try using ASPECT.'
+        xscale = xscaleTest
+        yscale = yscaleTest
+        xstyle=1
+        ystyle=1
+    ENDIF
+    IF Keyword_Set(isotropic) THEN BEGIN
+        IF N_Elements(xgrid) NE 0 THEN xrange = Max(xgrid, /NaN) - Min(xgrid, /NaN)
+        IF N_Elements(ygrid) NE 0 THEN yrange = Max(ygrid, /NaN) - Min(ygrid, /NaN)
+        dims = Size(data, /Dimensions)
+        IF N_Elements(x) EQ 0 THEN xrange = dims[0]
+        IF N_Elements(y) EQ 0 THEN yrange = dims[1]
+        aspect = Double(yrange) / xrange
+
+        ; Do a sanity check.
+        IF (aspect LT 1e-2) || (aspect GT 100) THEN $
+            Message, 'Axes ranges are incompatible with the ISOTROPIC keyword. Try using ASPECT.'
+    ENDIF
    
-    IF (N_Elements(aspect) NE 0) AND (Total(!P.MULTI) EQ 0) THEN BEGIN
+    IF (N_Elements(aspect) NE 0) && (Total(!P.MULTI) EQ 0) THEN BEGIN
     
         ; If position is set, then fit the plot into those bounds.
         IF (N_Elements(position) GT 0) THEN BEGIN
-          trial_position = Aspect(aspect, margin=0.)
+          trial_position = cgAspect(aspect, /Single_Plot)
           trial_width = trial_position[2]-trial_position[0]
           trial_height = trial_position[3]-trial_position[1]
           pos_width = position[2]-position[0]
@@ -698,7 +798,9 @@ PRO cgContour, data, x, y, $
           position[2] -= 0.5*(pos_width - trial_width)
           position[1] += 0.5*(pos_height - trial_height)
           position[3] -= 0.5*(pos_height - trial_height)
-        ENDIF ELSE position=Aspect(aspect)   ; if position isn't set, just use output of Aspect
+        ENDIF ELSE BEGIN
+            position=cgAspect(aspect, /Single_Plot)
+        ENDELSE
         
     ENDIF
     
@@ -706,7 +808,7 @@ PRO cgContour, data, x, y, $
     IF Keyword_Set(onImage) THEN overplot = 1
     
     ; Going to have to do all of this in decomposed color, if possible.
-    SetDecomposedState, 1, CURRENTSTATE=currentState
+    cgSetColorState, 1, CURRENTSTATE=currentState
     
     ; If current state is "indexed color" and colors are represented as long integers then "fix" them.
     IF (currentState EQ 0) THEN BEGIN
@@ -742,61 +844,7 @@ PRO cgContour, data, x, y, $
     IF N_Elements(charsize) EQ 0 THEN charsize = cgDefCharSize(FONT=font)
     IF N_Elements(c_charsize) EQ 0 THEN c_charsize = charsize * 0.75
     
-    ; Handle data properly.
-    ndims = Size(data, /N_DIMENSIONS)
-    s = Size(data, /DIMENSIONS)
-    CASE ndims OF
-        1: BEGIN
-           IF N_Elements(x) EQ 0 THEN BEGIN
-               IF Keyword_Set(onImage) THEN BEGIN
-                   CASE !X.TYPE OF
-                      0: xgrid = Scale_Vector(Indgen(s[0]), !X.CRange[0], !X.CRange[1])
-                      1: xgrid = Scale_Vector(Indgen(s[0]), 10^!X.CRange[0], 10^!X.CRange[1])
-                      3: Message, 'Must supply LONGITUDE vector when overplotting on map projections'
-                   ENDCASE
-               ENDIF ELSE BEGIN
-                  xgrid = Indgen(s[0])
-               ENDELSE
-           ENDIF ELSE xgrid = x
-           IF N_Elements(y) EQ 0 THEN BEGIN
-               IF Keyword_Set(onImage) THEN BEGIN
-                   CASE !Y.TYPE OF
-                      0: ygrid = Scale_Vector(Indgen(s[1]), !Y.CRange[0], !Y.CRange[1])
-                      1: ygrid = Scale_Vector(Indgen(s[1]), 10^!Y.CRange[0], 10^!Y.CRange[1])
-                      3: Message, 'Must supply LATITUDE vector when overplotting on map projections'
-                   ENDCASE
-               ENDIF ELSE BEGIN
-                  ygrid = Indgen(s[1])
-               ENDELSE
-           ENDIF ELSE ygrid = y
-           END
-        2: BEGIN
-           IF N_Elements(x) EQ 0 THEN BEGIN
-               IF Keyword_Set(onImage) THEN BEGIN
-                   CASE !X.TYPE OF
-                      0: xgrid = Scale_Vector(Indgen(s[0]), !X.CRange[0], !X.CRange[1])
-                      1: xgrid = Scale_Vector(Indgen(s[0]), 10^!X.CRange[0], 10^!X.CRange[1])
-                      3: Message, 'Must supply LONGITUDE vector when overplotting on map projections'
-                   ENDCASE
-               ENDIF ELSE BEGIN
-                  xgrid = Indgen(s[0])
-               ENDELSE
-           ENDIF ELSE xgrid = x
-           IF N_Elements(y) EQ 0 THEN BEGIN
-               IF Keyword_Set(onImage) THEN BEGIN
-                   CASE !Y.TYPE OF
-                      0: ygrid = Scale_Vector(Indgen(s[1]), !Y.CRange[0], !Y.CRange[1])
-                      1: ygrid = Scale_Vector(Indgen(s[1]), 10^!Y.CRange[0], 10^!Y.CRange[1])
-                      3: Message, 'Must supply LATITUDE vector when overplotting on map projections'
-                   ENDCASE
-               ENDIF ELSE BEGIN
-                  ygrid = Indgen(s[1])
-               ENDELSE
-           ENDIF ELSE ygrid = y
-           END
-        ELSE: Message, 'Contour data must be 1D or 2D.'
-    ENDCASE
-    
+ 
     ; Get the current color table vectors. The NULL business was put here at
     ; the request of Wayne Landsman in support of NASA Astronomy Library. It
     ; is important for programs NASA runs.
@@ -959,7 +1007,7 @@ PRO cgContour, data, x, y, $
         ENDIF ELSE BEGIN
             con_colors = Replicate(color, nlevels)
         ENDELSE
-        IF Size(con_colors, /TYPE) EQ 3 THEN IF GetDecomposedState() EQ 0 THEN con_colors = Byte(con_colors)
+        IF Size(con_colors, /TYPE) EQ 3 THEN IF cgGetColorState() EQ 0 THEN con_colors = Byte(con_colors)
         IF Size(con_colors, /TYPE) LE 2 THEN con_colors = StrTrim(Fix(c_colors),2)
     ENDELSE
     
@@ -1007,8 +1055,8 @@ PRO cgContour, data, x, y, $
  
                     ; Make sure axis are turned off. I don't really want to draw anything,
                     ; just advance !P.MULTI or "erase" the display for the next plot.
-                    IF BitGet(xstyle, 2) NE 1 THEN xxstyle = xstyle + 4 ELSE xxstyle = xstyle
-                    IF BitGet(ystyle, 2) NE 1 THEN yystyle = xstyle + 4 ELSE yystyle = ystyle
+                    IF cgBitGet(xstyle, 2) NE 1 THEN xxstyle = xstyle + 4 ELSE xxstyle = xstyle
+                    IF cgBitGet(ystyle, 2) NE 1 THEN yystyle = xstyle + 4 ELSE yystyle = ystyle
                     
                     ; Draw the plot that doesn't draw anything.
                      Contour, contourData, xgrid, ygrid, COLOR=axiscolor, CHARSIZE=charsize, $
@@ -1168,7 +1216,7 @@ PRO cgContour, data, x, y, $
      ENDIF
     
     ; Restore the decomposed color state if you can.
-    SetDecomposedState, currentState
+    cgSetColorState, currentState
     
     ; Restore the color table. Can't do this for the Z-buffer or
     ; the snap shot will be incorrect.
@@ -1195,7 +1243,7 @@ PRO cgContour, data, x, y, $
            PDF_Path = pdf_path                             ; The path to the Ghostscript conversion command.
     
         ; Close the PostScript file and create whatever output is needed.
-        PS_END, DELETE_PS=delete_ps, $
+        cgPS_Close, DELETE_PS=delete_ps, $
              ALLOW_TRANSPARENT=im_transparent, $
              BMP=bmp_flag, $
              DENSITY=im_density, $

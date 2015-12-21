@@ -43,8 +43,8 @@ lmax=lmax, more_pnames=more_pnames, more_params=more_params, add=add
         endif
 
         if (not keyword_set(fg_types)) then begin
-            fg_scales=strarr(nfgs)
-            fg_scales[*] = 'TT'
+            fg_types=strarr(nfgs)
+            fg_types[*] = 'TT'
         endif
         
         tags = tag_names(cmb_cls)

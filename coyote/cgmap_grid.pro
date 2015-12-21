@@ -80,6 +80,7 @@
 ;           have a point in the XRANGE of the projection. A fix to that problem has failed to work in all
 ;           circumstances, so I have done more work on that algorithm to see if I can solve the problem is
 ;           a better way. Now usine Value_Locate to test for point. 19 February 2013. DWF.
+;        Now implementing label formatting when using CGGRID keyword. 27 November 2013. DWF.
 ;            
 ; :Copyright:
 ;     Copyright (c) 2011-2013, Fanning Software Consulting, Inc.
@@ -262,9 +263,15 @@ end
 ;        If this keyword is set, the object is added to the resizeable graphics
 ;        window, cgWindow. Note that a map projection command must be added to the
 ;        window before this command is added to be effective.
-;     bcolor: optional, type=string, default='opposite'
+;     bcolor: in, optional, type=string, default='opposite'
 ;        The name of the color to draw box axes with.
-;     box_axes: optional, type=boolean, default=0
+;     bthick: in, optional, type=float
+;         The thickness of the box axes in device units.
+;     blabel: in, optional, type=float, default=0
+;          Set this keyword to 0 to label all four of the box axes.
+;          Set this keyword to 1 to label the left and bottom box axes only.
+;          Set this keyword to 2 to label the top and right box axes only.
+;     box_axes: in, optional, type=boolean, default=0
 ;        Set this keyword to draw box axes on the map projection.
 ;     cggrid: in, optional, type=boolean, default=0
 ;        Set this keyword to allow the latitude and longitude values to be set by
@@ -407,6 +414,8 @@ end
 PRO cgMap_Grid, $
    ADDCMD=addcmd, $
    BCOLOR=bcolor, $
+   BLABEL=blabel, $
+   BTHICK=bthick, $
    BOX_AXES=box_axes, $
    CGGRID=cggrid, $
    CHARSIZE=charsize, $
@@ -446,8 +455,8 @@ PRO cgMap_Grid, $
     Catch, theError
     IF theError NE 0 THEN BEGIN
         Catch, /CANCEL
-        void = Error_Message()
-        IF N_Elements(thisState) NE 0 THEN SetDecomposedState, thisState
+        void = cgErrorMsg()
+        IF N_Elements(thisState) NE 0 THEN cgSetColorState, thisState
         RETURN
     ENDIF
 
@@ -455,6 +464,8 @@ PRO cgMap_Grid, $
     IF (Keyword_Set(addcmd)) && ((!D.Flags && 256) NE 0) THEN BEGIN
     
         cgWindow, 'cgMap_Grid', $
+               BLABEL=blabel, $
+               BTHICK=bthick, $
                BOX_AXES=box_axes, $
                CHARSIZE=charsize, $
                CGGRID=cgGrid, $
@@ -496,6 +507,7 @@ PRO cgMap_Grid, $
     IF !D.Name EQ 'PS' THEN Device, COLOR=1, BITS_PER_PIXEL=8
     SetDefaultValue, charsize, cgDefCharsize() * 0.75
     SetDefaultValue, bcolor, "opposite"
+    SetDefaultValue, blabel, 0
     noclip = Keyword_Set(noclip)
     
     ; I want to use the more natural LINESTYLE and THICK keywords to this routine.
@@ -507,7 +519,7 @@ PRO cgMap_Grid, $
     ENDIF ELSE IF (N_Elements(thick) EQ 0) THEN thick = !P.Thick 
 
     ; Try to do this in decomposed color, if possible.
-    SetDecomposedState, 1, Current=thisState
+    cgSetColorState, 1, Current=thisState
     
     ; Need a color.
     IF N_Elements(scolor) NE 0 THEN BEGIN
@@ -522,7 +534,7 @@ PRO cgMap_Grid, $
     ENDIF ELSE scolor = "opposite"
     IF N_Elements(scolor) EQ 0 THEN color = !P.Color ELSE  color = sColor
     IF (Size(scolor, /TNAME) EQ 'BYTE') AND (N_Elements(scolor) EQ 3) THEN color = cgColor(scolor)
-    IF Size(color, /TYPE) EQ 3 THEN IF GetDecomposedState() EQ 0 THEN color = Byte(color)
+    IF Size(color, /TYPE) EQ 3 THEN IF cgGetColorState() EQ 0 THEN color = Byte(color)
     IF Size(color, /TYPE) LE 2 THEN color = StrTrim(Fix(color),2)
     
     ; Check for label color now. Depends on other colors and value of BOX_AXES.
@@ -543,7 +555,8 @@ PRO cgMap_Grid, $
          ; This routine is here because Map_Grid does not select good line for small areas.
          IF Keyword_Set(cgGrid) THEN BEGIN
              mapObj -> LatLonLabels, LATS=mlats, LATLAB=mlatlab, LATDELTA=latdelta, LATNAMES=mlatnames, $
-                                     LONS=mlons, LONLAB=mlonlab, LONDELTA=londelta, LONNAMES=mlonnames
+                                     LONS=mlons, LONLAB=mlonlab, LONDELTA=londelta, LONNAMES=mlonnames, $
+                                     FORMAT=format
              IF N_Elements(lats) EQ 0 THEN BEGIN
                 lats = mlats
                 IF (N_Elements(latnames) EQ 0) THEN latnames = mlatnames
@@ -696,6 +709,7 @@ PRO cgMap_Grid, $
   
   
   ;Compute longit distance between points for latitude lines.
+  IF lonmin EQ lonmax THEN lonmax = lonmin + 360.
   step = 4 < (lonmax - lonmin)/10. ;At most 4 degrees
   len = (lonmax-lonmin)/step + 1
   loni = findgen(len) * step + lonmin
@@ -796,7 +810,7 @@ PRO cgMap_Grid, $
         xww = (map.uv_box[[0,2]] * !x.s[1] + !x.s[0]) * !d.x_size + del
         yww = (map.uv_box[[1,3]] * !y.s[1] + !y.s[0]) * !d.y_size + del
       ENDELSE
-      bdel = box_thick * !d.y_px_cm ;Thickness of box in device units
+      IF (N_Elements(bthick) NE 0) THEN bdel = bthick ELSE bdel = box_thick * !d.y_px_cm ;Thickness of box in device units
   
       xp = xw[0] - [0,bdel, bdel,0] ;X  & Y polygon coords for outer box
       yp = yw[0] - [0,0,bdel,bdel]
@@ -1001,22 +1015,28 @@ PRO cgMap_Grid, $
                          thisMapStructure = mapObj -> GetMapStruct()
                          ll = Map_Proj_Inverse(xrange, yrange, MAP_STRUCTURE=thisMapStructure)
                          lonii = Reform(ll[0,*])
-                         lonii = Scale_Vector(Findgen(N_Elements(loni)), lonii[0], lonii[1])
+                         lonii = cgScaleVector(Findgen(N_Elements(loni)), lonii[0], lonii[1])
                          uv = MAP_PROJ_FORWARD(lonii, REPLICATE(lat, N_ELEMENTS(lonii)), $
-                              MAP_STRUCTURE=thisMapStruct)
+                              MAP_STRUCTURE=thisMapStruct, POLYLINES=polylines)
+;                          uv = MAP_PROJ_FORWARD(lonii, REPLICATE(lat, N_ELEMENTS(lonii)), $
+;                              MAP_STRUCTURE=thisMapStruct) ;;; Screws up near the poles, I think.
+;                          polylines = [N_Elements(loni), Indgen(N_Elements(loni))]
                          loni = lonii
                      ENDIF ELSE BEGIN
                         uv = MAP_PROJ_FORWARD(loni, REPLICATE(lat, N_ELEMENTS(loni)), $
-                             MAP_STRUCTURE=thisMapStruct)                     
+                             MAP_STRUCTURE=thisMapStruct, POLYLINES=polylines)  
+;                            uv = MAP_PROJ_FORWARD(loni, REPLICATE(lat, N_ELEMENTS(loni)), $
+;                               MAP_STRUCTURE=thisMapStruct) ;;; Screws up near the poles, I think.
+;                            polylines = [N_Elements(loni), Indgen(N_Elements(loni))]                   
                      ENDELSE
               ENDIF ELSE BEGIN
                   uv = MAP_PROJ_FORWARD(loni, REPLICATE(lat, N_ELEMENTS(loni)), $
-                       MAP_STRUCTURE=thisMapStruct)
+                       MAP_STRUCTURE=thisMapStruct, POLYLINES=polylines)
+                   ;   uv = MAP_PROJ_FORWARD(loni, REPLICATE(lat, N_ELEMENTS(lonii)), $
+                   ;      MAP_STRUCTURE=thisMapStruct) ;;; Screws up near the poles, I think.
+                   ;  polylines = [N_Elements(loni), Indgen(N_Elements(loni))]
               ENDELSE
 
-              ; This line has been modified by DWF to fix a bug in MAP_PROJ_FORWARD that
-              ; screws up lines near the poles.
-              polylines = [N_Elements(loni), Indgen(N_Elements(loni))]
               index = 0L
               npoly = N_ELEMENTS(polylines)
               ; Loop thru our polylines connectivity array.
@@ -1085,9 +1105,18 @@ PRO cgMap_Grid, $
                   cgColorFill, xp0, yp0, /DEVICE, COLOR=bcolor
               xychar[iaxis] = z
               if strlen(vtext[i]) gt 0 then begin
-                  cgText, xychar[0], xychar[1], vtext[i], $
+                  CASE blabel OF
+                     0: cgText, xychar[0], xychar[1], vtext[i], $
                       ORIENTATION=dy * (90-180*j), CHARSIZE=charsize, $
                       ALIGN=0.5, CLIP=0, Z=zvalue, COLOR=lcolor, /DEVICE, _EXTRA=extra
+                     1: IF (j EQ 0) THEN cgText, xychar[0], xychar[1], vtext[i], $
+                         ORIENTATION=dy * (90-180*j), CHARSIZE=charsize, $
+                         ALIGN=0.5, CLIP=0, Z=zvalue, COLOR=lcolor, /DEVICE, _EXTRA=extra
+                      2: IF (j EQ 1) THEN cgText, xychar[0], xychar[1], vtext[i], $
+                         ORIENTATION=dy * (90-180*j), CHARSIZE=charsize, $
+                         ALIGN=0.5, CLIP=0, Z=zvalue, COLOR=lcolor, /DEVICE, _EXTRA=extra
+                  ENDCASE
+                  
               endif
               v0 = z
           endfor
@@ -1101,6 +1130,6 @@ PRO cgMap_Grid, $
   endif   ; box_thick
 
     ; Restore color mode
-    SetDecomposedState, thisState
+    cgSetColorState, thisState
     
 end
